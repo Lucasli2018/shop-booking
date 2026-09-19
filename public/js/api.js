@@ -193,4 +193,28 @@ function weekdayName(wd) {
   return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][wd] || "";
 }
 
-// (全局注册完成：ApiClient / AdminClient / ApiError / showToast / formatDate / formatPrice / todayString / weekdayOf / weekdayName)
+function shiftDate(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+// 本周周一（完整周从周一开始）
+function mondayOf(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); // 周一=0
+  const pad = n => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+// HTML 转义（全局工具，各页面共用）
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+// (全局注册完成：ApiClient / AdminClient / ApiError / showToast / formatDate / formatPrice / todayString / weekdayOf / weekdayName / shiftDate / mondayOf / escapeHtml)

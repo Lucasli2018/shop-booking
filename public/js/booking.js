@@ -8,6 +8,7 @@ class BookingApp {
       shop: null,
       services: [],
       selectedService: null,
+      selectedCategory: null,
       selectedDate: todayString(),
       selectedSlot: null,
       slots: null,
@@ -68,8 +69,40 @@ class BookingApp {
 
   renderServices() {
     const grid = document.getElementById("serviceGrid");
-    grid.innerHTML = this.state.services.map(s => `
+    const catRow = document.getElementById("categoryRow");
+
+    // 分类 chips（有分类数据才显示）
+    const cats = [...new Set(this.state.services.map(s => s.category).filter(Boolean))];
+    if (cats.length > 0) {
+      catRow.classList.remove("hidden");
+      catRow.innerHTML = ["全部", ...cats].map(c =>
+        `<button type="button" class="cat-chip ${c === this.state.selectedCategory ? "active" : ""}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`
+      ).join("");
+      catRow.querySelectorAll(".cat-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+          this.state.selectedCategory = chip.dataset.cat === "全部" ? null : chip.dataset.cat;
+          catRow.querySelectorAll(".cat-chip").forEach(c => c.classList.remove("active"));
+          chip.classList.add("active");
+          this.renderServiceCards();
+        });
+      });
+    }
+    this.renderServiceCards();
+  }
+
+  renderServiceCards() {
+    const grid = document.getElementById("serviceGrid");
+    const cat = this.state.selectedCategory;
+    const list = cat ? this.state.services.filter(s => s.category === cat) : this.state.services;
+
+    if (list.length === 0) {
+      grid.innerHTML = '<div class="empty" style="grid-column:1/-1;"><div class="title">该分类暂无服务</div></div>';
+      return;
+    }
+
+    grid.innerHTML = list.map(s => `
       <div class="service-card" data-id="${s.id}">
+        ${s.category ? `<span class="service-cat">${escapeHtml(s.category)}</span>` : ""}
         <div class="service-name">${escapeHtml(s.name)}</div>
         <div class="service-desc">${escapeHtml(s.description || "")}</div>
         <div class="service-meta">
@@ -199,6 +232,7 @@ class BookingApp {
     const btn = document.getElementById("submitBtn");
     const name = document.getElementById("customerName").value.trim();
     const phone = document.getElementById("customerPhone").value.trim();
+    const email = document.getElementById("customerEmail").value.trim();
     const note = document.getElementById("customerNote").value.trim();
 
     if (!this.state.selectedService || !this.state.selectedSlot) {
@@ -208,6 +242,9 @@ class BookingApp {
     if (!name) { showToast("请填写姓名", "error"); return; }
     if (!phone || !/^\+?\d{7,20}$/.test(phone)) {
       showToast("请填写有效手机号", "error"); return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("邮箱格式不正确", "error"); return;
     }
 
     btn.disabled = true;
@@ -220,6 +257,7 @@ class BookingApp {
         scheduledAt,
         customerName: name,
         customerPhone: phone,
+        customerEmail: email || null,
         note,
       });
 
@@ -282,7 +320,8 @@ class BookingApp {
     listEl.innerHTML = '<div class="loading"><span class="spinner"></span> 查询中…</div>';
     try {
       const res = await this.client.get(`/api/my/${this.shopCode}?phone=${encodeURIComponent(phone)}`);
-      this.renderMyBookings(res.bookings || []);
+      this.myBookings = res.bookings || [];
+      this.renderMyBookings(this.myBookings);
     } catch (err) {
       listEl.innerHTML = `<div class="empty"><div class="title">查询失败</div><div class="text-sm">${escapeHtml(err.message)}</div></div>`;
     }
@@ -304,7 +343,7 @@ class BookingApp {
     };
     listEl.innerHTML = bookings.map(b => {
       const st = STATUS[b.status] || { label: b.status, cls: "badge-pending" };
-      const canCancel = b.status === "pending" || b.status === "confirmed";
+      const canManage = b.status === "pending" || b.status === "confirmed";
       return `
         <div class="my-booking" data-id="${b.id}" style="border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px; margin-bottom:10px; background:var(--card);">
           <div class="flex" style="justify-content:space-between; align-items:center; gap:8px;">
@@ -314,12 +353,107 @@ class BookingApp {
           <div class="text-sm text-muted" style="margin-top:6px;">🕒 ${escapeHtml(b.scheduledAt)}</div>
           <div class="text-sm text-muted">👤 ${escapeHtml(b.customerName)} · 📱 ${escapeHtml(maskPhone(b.customerPhone))}</div>
           ${b.note ? `<div class="text-sm text-muted">📝 ${escapeHtml(b.note)}</div>` : ""}
-          ${canCancel ? `<div class="text-right mt-2"><button class="btn btn-danger btn-sm" data-cancel="${b.id}">取消预约</button></div>` : ""}
+          ${canManage ? `<div class="text-right mt-2" style="display:flex; gap:8px; justify-content:flex-end;">
+            <button class="btn btn-ghost btn-sm" data-reschedule="${b.id}">改期</button>
+            <button class="btn btn-danger btn-sm" data-cancel="${b.id}">取消预约</button>
+          </div>
+          <div class="rs-panel" data-rs-panel="${b.id}"></div>` : ""}
         </div>`;
     }).join("");
 
     listEl.querySelectorAll("[data-cancel]").forEach(btn => {
       btn.addEventListener("click", () => this.cancelMine(parseInt(btn.dataset.cancel, 10)));
+    });
+    listEl.querySelectorAll("[data-reschedule]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = parseInt(btn.dataset.reschedule, 10);
+        const b = this.myBookings.find(x => x.id === id);
+        if (b) this.toggleReschedulePanel(b);
+      });
+    });
+  }
+
+  // ============ 改期 ============
+  toggleReschedulePanel(b) {
+    const panel = document.querySelector(`[data-rs-panel="${b.id}"]`);
+    if (!panel) return;
+    // 再点一次收起
+    if (panel.dataset.open === "1") {
+      panel.innerHTML = "";
+      panel.dataset.open = "0";
+      return;
+    }
+    panel.dataset.open = "1";
+    const today = todayString();
+    panel.innerHTML = `
+      <div style="margin-top:10px; padding:12px; background:var(--cream-2); border-radius:var(--radius-sm);">
+        <div class="text-sm" style="font-weight:600; margin-bottom:8px;">选择新的时间</div>
+        <input type="date" class="input" data-rs-date="${b.id}" min="${today}" value="${today}" style="margin-bottom:8px;">
+        <div class="slot-grid" data-rs-slots="${b.id}" style="max-height:180px;">
+          <div class="text-sm text-muted">选择日期后加载时段…</div>
+        </div>
+        <div class="modal-actions" style="margin-top:12px; justify-content:flex-end;">
+          <button class="btn btn-primary btn-sm" data-rs-confirm="${b.id}" disabled>确认改期</button>
+        </div>
+      </div>`;
+
+    const dateInput = panel.querySelector(`[data-rs-date="${b.id}"]`);
+    const slotsEl = panel.querySelector(`[data-rs-slots="${b.id}"]`);
+    const confirmBtn = panel.querySelector(`[data-rs-confirm="${b.id}"]`);
+    let selectedSlot = null;
+
+    dateInput.addEventListener("change", async () => {
+      selectedSlot = null;
+      confirmBtn.disabled = true;
+      const date = dateInput.value;
+      if (!date) return;
+      slotsEl.innerHTML = '<div class="loading"><span class="spinner"></span> 加载中…</div>';
+      try {
+        const res = await this.client.get(
+          `/api/slots/${this.shopCode}?serviceId=${b.serviceId}&date=${date}`
+        );
+        if (res.closed) {
+          slotsEl.innerHTML = '<div class="text-sm text-muted">该日休息</div>';
+          return;
+        }
+        if (res.available.length === 0) {
+          slotsEl.innerHTML = '<div class="text-sm text-muted">该日已约满，试试其他日期</div>';
+          return;
+        }
+        slotsEl.innerHTML = res.all.map(t => {
+          const ok = res.available.includes(t);
+          return `<div class="slot ${ok ? "" : "disabled"}" data-t="${ok ? t : ""}">${t}</div>`;
+        }).join("");
+        slotsEl.querySelectorAll(".slot:not(.disabled)").forEach(el => {
+          el.addEventListener("click", () => {
+            slotsEl.querySelectorAll(".slot").forEach(s => s.classList.remove("active"));
+            el.classList.add("active");
+            selectedSlot = el.dataset.t;
+            confirmBtn.disabled = false;
+          });
+        });
+      } catch (err) {
+        slotsEl.innerHTML = `<div class="text-sm text-muted">加载失败：${escapeHtml(err.message)}</div>`;
+      }
+    });
+
+    confirmBtn.addEventListener("click", async () => {
+      if (!selectedSlot || !dateInput.value) return;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "改期中…";
+      try {
+        await this.client.post(`/api/my/${this.shopCode}/reschedule`, {
+          bookingId: b.id,
+          phone: document.getElementById("myPhone").value.trim(),
+          newScheduledAt: `${dateInput.value} ${selectedSlot}`,
+        });
+        showToast("改期成功", "success");
+        await this.lookupMine();
+      } catch (err) {
+        showToast(err.message || "改期失败", "error");
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "确认改期";
+      }
     });
   }
 
