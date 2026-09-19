@@ -88,26 +88,35 @@ wrangler pages deploy . --project-name=shop-booking
 ```
 shop-booking/
 ├── wrangler.toml              # Cloudflare Pages 配置
-├── schema.sql                 # D1 初始化脚本（生产用）
+├── schema.sql                 # D1 全量快照（全新库手动初始化用）
+├── migrations/                # D1 增量迁移（已有库升级用，见「数据库迁移」）
+│   ├── 0000_init.sql
+│   ├── 0001_service_category.sql
+│   └── 0002_booking_customer_email.sql
+├── tests/
+│   └── probe.js               # 无头浏览器页面探针（Node22 原生 WebSocket + CDP）
 ├── README.md
 ├── functions/                 # Pages Functions（后端）
-│   ├── _middleware.js         # 全局中间件：CORS + 本地自动建表 + 日志
+│   ├── _middleware.js         # 全局中间件：CORS + 首访自动建表/幂等升级 + 日志
 │   ├── _shared/               # 共享工具
 │   │   ├── crypto.js          # HMAC-SHA256 PIN hash、token 生成
 │   │   └── helpers.js         # JSON 响应、session 校验、时间工具
+│   ├── _lib/
+│   │   └── email.js           # Resend 邮件（可插拔，未配置即跳过）
 │   └── api/
 │       ├── services/          # 顾客：服务列表
 │       ├── slots/             # 顾客：可用时间段生成
 │       ├── bookings/          # 顾客：提交预约
 │       ├── queue/             # 顾客：排队状态（公开）
+│       ├── my/                # 顾客：我的预约（查询/取消/改期，手机号弱校验）
 │       └── admin/             # 商家后台
 │           ├── auth.js        # PIN 登录
 │           ├── _guard.js      # Session 守卫（requireAdmin）
 │           ├── image/         # 图片读取
 │           └── [shopCode]/    # 店铺级后台接口
-│               ├── bookings.js       # 预约列表
+│               ├── bookings.js       # 预约列表（支持 date 单日 / from+to 区间）
 │               ├── bookings/[id].js  # 状态变更
-│               ├── services.js       # 服务 CRUD
+│               ├── services.js       # 服务 CRUD（含分类）
 │               ├── services/[id].js
 │               ├── schedule.js       # 营业时间
 │               ├── profile.js        # 店铺信息 + 改 PIN
@@ -135,10 +144,11 @@ shop-booking/
 |--------|------|------|
 | GET | `/api/services/:shopCode` | 服务列表 + 店铺信息 |
 | GET | `/api/slots/:shopCode?serviceId&date` | 可用时间段（已扣占用 + 已过时段） |
-| POST | `/api/bookings/:shopCode` | 提交预约（原子防并发冲突） |
+| POST | `/api/bookings/:shopCode` | 提交预约（原子防并发冲突；可选 `customerEmail` 发确认邮件） |
 | GET | `/api/queue/:shopCode` | 当前排队（顾客轮询用） |
 | GET | `/api/my/:shopCode?phone=` | 顾客凭手机号查自己的预约（手机号脱敏返回） |
 | POST | `/api/my/:shopCode/cancel` | 顾客凭手机号取消自己的预约（仅 pending/confirmed 且未过期） |
+| POST | `/api/my/:shopCode/reschedule` | 顾客凭手机号改期（原子防冲突，排除自身） |
 
 ### 商家侧（需 `Authorization: Bearer <token>`）
 
@@ -329,10 +339,37 @@ VALUES ('my-shop', 1, '09:00', '21:00', 30);
 - [ ] 数据统计仪表盘（每日/每周/月预约趋势）
 - [x] 顾客手机号一键查我的预约
 - [x] 取消预约（顾客端）
-- [ ] 服务分类（理发 / 染发 / 护理）
+- [x] 服务分类（理发 / 染发 / 护理）
+- [x] 预约改期（顾客端）
+- [x] 邮件确认（可插拔）
+- [x] 后台周历视图
+- [ ] 预约提醒（提前 N 小时；Pages 无 Cron，需配一个 Worker 定时任务）
+- [ ] 时段容量（多位师傅并行）
+- [ ] 爽约黑名单 / 次卡
 - [ ] 员工管理（多个发型师）
 - [ ] 优惠券 / 会员卡
-- [ ] 多店铺切换 UI
+- [ ] 多店铺切换 UI / 商户自助注册
+
+---
+
+## 数据库迁移
+
+- **全新数据库**：`wrangler d1 execute shop-booking-db --remote --file=schema.sql`（全量快照，一步到位）
+- **已有数据库升级**：把 `migrations/` 里的 SQL 按序号执行（Cloudflare Dashboard → D1 → SQL 编辑器，或 `wrangler d1 migrations apply shop-booking-db --remote`）
+- **本地开发**：无需手动操作，`_middleware.js` 首次访问自动建表 + 幂等补列（不区分分支，
+  git 化后本地 `CF_PAGES_BRANCH` 是 `master` 也能正常初始化）
+
+## 邮件确认（可插拔）
+
+预约时顾客可留邮箱（可选），提交成功后通过 [Resend](https://resend.com) 发送确认邮件。
+在 Pages 项目 **Settings → Variables** 配置：
+
+- `RESEND_API_KEY`：Resend 的 API Key（`re_` 开头）。**未配置时自动跳过发送，不影响预约流程。**
+- `MAIL_FROM`：发件人（如 `shop-booking <noreply@yourdomain.com>`）。未配置时用 Resend 测试发件人，
+  只能发给 Resend 注册邮箱；正式使用需在 Resend 验证自有域名。
+
+> 预约开始前的提醒通知需要定时任务（Cron Trigger），Pages 项目不支持，需另建一个
+> Cloudflare Worker 定时调用查询接口并发信——列入后续计划。
 
 ---
 
@@ -350,7 +387,22 @@ VALUES ('my-shop', 1, '09:00', '21:00', 30);
 - **UI 优化**：新增 hero 欢迎区、卡片入场动画、「我的预约」卡片样式；页脚加商家后台入口；
   手机号标注为必填。
 
-> 注：前端为经典脚本（非 ES Module），所有共享符号在 `api.js` 中定义于全局作用域。
+### 第二批（2026-09-20 同日）
+
+- **D1 migrations 体系**：`migrations/0000~0002`，schema.sql 变为全量快照；`_middleware.js`
+  改为「首访自动建表 + 幂等补列」，不再依赖 `CF_PAGES_BRANCH === 'local'`（git 化后本地分支是 master，
+  原判断会失效导致空库 500）。
+- **服务分类**：`services.category` 列 + 顾客端分类 chips 筛选 + 后台服务表单分类字段。
+- **预约改期**：`POST /api/my/:shopCode/reschedule`，手机号校验 + 状态机 + 未来时间 + 
+  原子 UPDATE 排除自身防冲突；「我的预约」弹窗内选日期/时段改期。
+- **邮件确认（可插拔）**：`functions/_lib/email.js`（Resend），预约表单新增可选邮箱，
+  `waitUntil` 异步发送，未配置 `RESEND_API_KEY` 时静默跳过。
+- **后台周历视图**：预约页「日/周」切换；周视图 7 列按状态着色，点表头跳转日视图；
+  `GET /api/admin/:shopCode/bookings` 新增 `from`+`to` 区间查询。
+- **测试**：新增 `tests/probe.js`（Node22 原生 WebSocket + CDP 真实时钟页面探针，9 断言），
+  探针抓出并修复 `escapeHtml is not defined`、index.html 启动脚本重复两个真实问题。
+
+> 注：前端为经典脚本（非 ES Module），所有共享符号（含 `escapeHtml`）在 `api.js` 中定义于全局作用域。
 
 ---
 
