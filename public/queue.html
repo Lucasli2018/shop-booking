@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>排队叫号</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📣</text></svg>">
+</head>
+<body>
+
+<header class="shop-header">
+  <div class="container shop-header-inner">
+    <a href="/?shop=SHOPCODE" class="btn btn-ghost btn-sm">← 返回预约</a>
+    <div class="shop-title" style="flex: 1;">
+      <h1 style="font-size: 18px;">📣 排队叫号</h1>
+      <span class="subtitle" id="shopName">加载中…</span>
+    </div>
+    <span class="text-sm text-muted" id="pollStatus">· 更新中</span>
+  </div>
+</header>
+
+<main class="container" style="padding-top: 32px; padding-bottom: 60px;">
+
+  <div id="queueHero" class="queue-hero">
+    <div class="text-muted" id="heroTitle">正在排队</div>
+    <div class="queue-number" id="heroNumber">-</div>
+    <div class="queue-status" id="heroStatus">加载中…</div>
+  </div>
+
+  <div class="queue-list" id="queueList">
+    <div class="loading text-center"><span class="spinner"></span> 加载中…</div>
+  </div>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/queue.js"></script>
+<script>
+  const shopCode = new URLSearchParams(location.search).get('shop') || 'tonys-hair';
+  document.querySelector('a[href*="shop"]').href = `/?shop=${encodeURIComponent(shopCode)}`;
+  const app = new QueueApp({ shopCode });
+  app.init();
+</script>
+
+</body>
+</html>
