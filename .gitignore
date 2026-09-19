@@ -1,0 +1,12 @@
+# Cloudflare 本地状态（含锁文件，避免误提交）
+.wrangler/
+.wrangler-dev/
+.wrangler-dev-state/
+
+# 依赖
+node_modules/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log

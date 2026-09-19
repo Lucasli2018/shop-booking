@@ -1,0 +1,24 @@
+# Cloudflare Pages 项目配置
+# 部署命令：wrangler pages deploy . --project-name=shop-booking
+# 本地开发：wrangler dev --port 8787
+
+name = "shop-booking"
+pages_build_output_dir = "public"
+
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 数据库绑定（本地名 DB，对应后端 env.DB）
+[[d1_databases]]
+binding = "DB"
+database_name = "shop-booking-db"
+database_id = "f5e7a5c2-af0d-42d3-a8a8-68e7b7a47fe8"
+
+# R2 存储绑定（本地名 R2，对应后端 env.R2）
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "shop-booking-images"
+
+# 部署前先在 Cloudflare Dashboard 创建 D1 database 和 R2 bucket，
+# 然后把上面的 database_id / bucket_name 换成你实际的值。
+# 详见 README.md 的「第一次部署」章节。
