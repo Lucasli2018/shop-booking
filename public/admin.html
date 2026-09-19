@@ -46,6 +46,7 @@
       <button class="admin-tab" data-tab="bookings">📅 预约</button>
       <button class="admin-tab" data-tab="services">🛍️ 服务</button>
       <button class="admin-tab" data-tab="schedule">🕒 营业时间</button>
+      <button class="admin-tab" data-tab="stats">📊 统计</button>
       <button class="admin-tab" data-tab="profile">⚙️ 店铺设置</button>
     </nav>
 
@@ -154,16 +155,26 @@
     <!-- Tab: 营业时间 -->
     <div class="tab-panel hidden" data-panel="schedule" id="panel-schedule">
       <h2 class="card-title" style="font-size: 18px;"><span class="icon">🕒</span> 营业时间</h2>
-      <p class="text-sm text-muted mb-4">设置每周各天的营业时段。slot 分钟档用于生成可选时间。</p>
+      <p class="text-sm text-muted mb-4">设置每周各天的营业时段。slot 分钟档用于生成可选时间；容量 = 该时段可同时服务的师傅/工位数。</p>
 
       <div id="scheduleTable" class="table-wrap">
         <table class="data">
           <thead>
-            <tr><th>星期</th><th>营业</th><th>开始</th><th>结束</th><th>档长</th><th>保存</th></tr>
+            <tr><th>星期</th><th>营业</th><th>开始</th><th>结束</th><th>档长</th><th>容量</th><th>保存</th></tr>
           </thead>
           <tbody id="scheduleBody"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- Tab: 统计 -->
+    <div class="tab-panel hidden" data-panel="stats" id="panel-stats">
+      <h2 class="card-title" style="font-size: 18px;"><span class="icon">📊</span> 数据统计</h2>
+      <div class="flex gap-3 mb-4" style="align-items: center;">
+        <button class="btn btn-primary btn-sm" id="refreshStatsBtn">🔄 刷新</button>
+        <span class="text-sm text-muted">数据基于店铺时区（本地日期）</span>
+      </div>
+      <div id="statsWrap"></div>
     </div>
 
     <!-- Tab: 店铺设置 -->

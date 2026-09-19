@@ -90,14 +90,17 @@ export async function onRequestGet({ request, env, params }) {
   const available = [];
   const occupied = {};
   const all = [];
+  const capacity = Math.max(parseInt(schedule.capacity, 10) || 1, 1);
 
   for (const slot of allSlots) {
     const timeStr = slot.slice(11);
     all.push(timeStr);
 
-    // 检查是否被占用
-    if (busyRanges.some(br => slot < br.end && br.start < addMinutes(slot, service.duration_min))) {
-      occupied[timeStr] = "已被预约";
+    // 容量判断：与该时段重叠的活跃预约数 >= capacity 即不可约
+    const slotEnd = addMinutes(slot, service.duration_min);
+    const overlapCount = busyRanges.filter(br => slot < br.end && br.start < slotEnd).length;
+    if (overlapCount >= capacity) {
+      occupied[timeStr] = capacity > 1 ? `已满（${overlapCount}/${capacity}）` : "已被预约";
       continue;
     }
 
@@ -107,8 +110,6 @@ export async function onRequestGet({ request, env, params }) {
       continue;
     }
 
-    // 检查距离现在是否太近（至少 30 分钟后才可约）
-    // 简化：只检查是否已过，不额外加提前量
     available.push(timeStr);
   }
 
@@ -124,6 +125,7 @@ export async function onRequestGet({ request, env, params }) {
       opensAt: schedule.opens_at,
       closesAt: schedule.closes_at,
       slotMinutes: schedule.slot_minutes,
+      capacity,
     },
   });
 }

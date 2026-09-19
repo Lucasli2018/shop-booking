@@ -57,25 +57,32 @@ export async function onRequestPost({ request, env, params }) {
   const now = nowLocalString(shop.timezone);
   if (newScheduledAt <= now) return fail("新时间已过期");
 
-  // 原子改期：排除自身的重叠校验，防并发占位
+  // 原子改期：排除自身的容量校验，防并发占位
   const end = addMinutes(newScheduledAt, booking.duration_min);
   const result = await env.DB.prepare(`
     UPDATE bookings SET
       scheduled_at = ?,
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
-      AND NOT EXISTS (
-        SELECT 1 FROM bookings b2
+      AND (
+        SELECT COUNT(*) FROM bookings b2
         WHERE b2.shop_code = ?
           AND b2.id != ?
           AND b2.status IN ('pending','confirmed','called','done')
           AND b2.scheduled_at < ?
           AND datetime(b2.scheduled_at, '+' || b2.duration_min || ' minutes') > ?
+      ) < (
+        SELECT COALESCE(MAX(capacity), 1) FROM shop_schedule
+        WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
       )
-  `).bind(newScheduledAt, bookingId, shopCode, bookingId, end, newScheduledAt).run();
+  `).bind(
+    newScheduledAt, bookingId,
+    shopCode, bookingId, end, newScheduledAt,
+    shopCode, date
+  ).run();
 
   if (!result.meta.changes) {
-    return fail("该时间段刚被占用，请重新选择", 409);
+    return fail("该时段容量已满，请重新选择", 409);
   }
 
   const updated = await env.DB.prepare(`

@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS shop_schedule (
   opens_at     TEXT NOT NULL,                    -- '09:00'
   closes_at    TEXT NOT NULL,                    -- '21:00'
   slot_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_minutes IN (15, 30, 45, 60, 90, 120)),
+  capacity     INTEGER NOT NULL DEFAULT 1 CHECK (capacity BETWEEN 1 AND 20),  -- 同一时段最大并行预约数
   active       INTEGER NOT NULL DEFAULT 1,
   UNIQUE(shop_code, weekday)
 );

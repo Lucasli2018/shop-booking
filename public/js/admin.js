@@ -131,6 +131,9 @@ class AdminApp {
     // 服务
     document.getElementById("addServiceBtn").addEventListener("click", () => this.openServiceModal());
 
+    // 统计
+    document.getElementById("refreshStatsBtn").addEventListener("click", () => this.loadStats());
+
     // 店铺设置
     document.getElementById("saveProfileBtn").addEventListener("click", () => this.saveProfile());
     document.getElementById("savePinBtn").addEventListener("click", () => this.changePin());
@@ -153,7 +156,72 @@ class AdminApp {
     if (tab === "bookings") this.loadBookings();
     if (tab === "services") this.loadServices();
     if (tab === "schedule") this.loadSchedule();
+    if (tab === "stats") this.loadStats();
     if (tab === "profile") this.loadProfile();
+  }
+
+  // ============ 统计 Tab ============
+  async loadStats() {
+    const wrap = document.getElementById("statsWrap");
+    wrap.innerHTML = '<div class="loading" style="padding: 40px; justify-content: center;"><span class="spinner"></span> 加载中…</div>';
+    try {
+      const res = await this.admin.get(`/api/admin/${this.shopCode}/stats`);
+      this.renderStats(res);
+    } catch (err) {
+      wrap.innerHTML = `<div class="text-center text-muted" style="padding: 40px;">${escapeHtml(err.message)}</div>`;
+      if (err.status === 401) this.logout();
+    }
+  }
+
+  renderStats(res) {
+    const wrap = document.getElementById("statsWrap");
+    const t = res.today;
+    const fmtMoney = c => c ? `¥${(c / 100).toFixed(c % 100 === 0 ? 0 : 1)}` : "¥0";
+    const rangeCard = (label, r) => `
+      <div class="stat-card">
+        <div class="stat-value">${r.total}</div>
+        <div class="stat-label">${label}</div>
+        <div class="text-sm text-muted">完成 ${r.done} · 取消率 ${r.cancelRate}%</div>
+      </div>`;
+
+    const maxTrend = Math.max(...res.trend.map(d => d.total), 1);
+    const trendBars = res.trend.map(d => `
+      <div class="trend-col">
+        <div class="trend-count">${d.total || ""}</div>
+        <div class="trend-bars">
+          <div class="trend-bar total" style="height: ${Math.round(d.total / maxTrend * 80)}px;" title="预约 ${d.total}"></div>
+          <div class="trend-bar done" style="height: ${Math.round((d.done || 0) / maxTrend * 80)}px;" title="完成 ${d.done || 0}"></div>
+        </div>
+        <div class="trend-date">${d.date.slice(5)}</div>
+      </div>`).join("");
+
+    const topRows = res.topServices.length
+      ? res.topServices.map((s, i) => `
+          <div class="flex" style="align-items:center; gap:10px; padding:8px 0; border-bottom:1px dashed var(--border);">
+            <span class="top-rank">${i + 1}</span>
+            <span style="flex:1;">${escapeHtml(s.name)}</span>
+            <strong>${s.count}</strong>
+          </div>`).join("")
+      : '<div class="text-sm text-muted" style="padding: 12px 0;">暂无数据</div>';
+
+    wrap.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card pending"><div class="stat-value">${t.total}</div><div class="stat-label">今日预约</div></div>
+        <div class="stat-card confirmed"><div class="stat-value">${t.done}</div><div class="stat-label">今日完成</div></div>
+        <div class="stat-card called"><div class="stat-value">${fmtMoney(t.revenueCents)}</div><div class="stat-label">今日营收</div></div>
+        ${rangeCard("近 7 天", res.week)}
+        ${rangeCard("近 30 天", res.month)}
+      </div>
+
+      <div class="card mb-4">
+        <h3 class="card-title">📈 近 7 天趋势 <span class="text-sm text-muted" style="font-weight:400;">（红=预约量 · 绿=完成量）</span></h3>
+        <div class="trend-row">${trendBars}</div>
+      </div>
+
+      <div class="card mb-4" style="max-width: 480px;">
+        <h3 class="card-title">🔥 热门服务 TOP5 <span class="text-sm text-muted" style="font-weight:400;">（近 30 天）</span></h3>
+        ${topRows}
+      </div>`;
   }
 
   // ============ 排队 Tab ============
@@ -547,6 +615,7 @@ class AdminApp {
               ${[15, 30, 45, 60, 90, 120].map(m => `<option value="${m}" ${m === day.slotMinutes ? "selected" : ""}>${m} 分钟</option>`).join("")}
             </select>
           </td>
+          <td><input type="number" class="input" id="sch-cap-${day.weekday}" min="1" max="20" value="${day.capacity || 1}" style="width: 64px;"></td>
           <td><button class="btn btn-primary btn-sm" onclick="app.saveScheduleDay(${day.weekday})">💾 保存</button></td>
         </tr>
       `).join("");
@@ -561,9 +630,10 @@ class AdminApp {
     const opensAt = document.getElementById(`sch-open-${weekday}`).value;
     const closesAt = document.getElementById(`sch-close-${weekday}`).value;
     const slotMinutes = parseInt(document.getElementById(`sch-slot-${weekday}`).value, 10);
+    const capacity = parseInt(document.getElementById(`sch-cap-${weekday}`).value, 10) || 1;
 
     try {
-      await this.admin.upsertSchedule({ weekday, opensAt, closesAt, slotMinutes, active });
+      await this.admin.upsertSchedule({ weekday, opensAt, closesAt, slotMinutes, capacity, active });
       showToast("已保存", "success");
     } catch (err) {
       showToast(err.message, "error");

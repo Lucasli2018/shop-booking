@@ -15,7 +15,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const rows = await env.DB.prepare(`
     SELECT id, weekday, opens_at AS opensAt, closes_at AS closesAt,
-           slot_minutes AS slotMinutes, active
+           slot_minutes AS slotMinutes, capacity, active
     FROM shop_schedule
     WHERE shop_code = ?
     ORDER BY weekday
@@ -30,6 +30,7 @@ export async function onRequestGet({ request, env, params }) {
       opensAt: "09:00",
       closesAt: "21:00",
       slotMinutes: 30,
+      capacity: 1,
       active: 0,
     });
   }
@@ -49,6 +50,7 @@ export async function onRequestPost({ request, env, params }) {
   const opensAt = body.opensAt;
   const closesAt = body.closesAt;
   const slotMinutes = parseInt(body.slotMinutes, 10) || 30;
+  const capacity = Math.min(Math.max(parseInt(body.capacity, 10) || 1, 1), 20);
   const active = body.active === false ? 0 : 1;
 
   if (!Number.isFinite(weekday) || weekday < 0 || weekday > 6) {
@@ -65,14 +67,15 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   await env.DB.prepare(`
-    INSERT INTO shop_schedule (shop_code, weekday, opens_at, closes_at, slot_minutes, active)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO shop_schedule (shop_code, weekday, opens_at, closes_at, slot_minutes, capacity, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(shop_code, weekday) DO UPDATE SET
       opens_at = excluded.opens_at,
       closes_at = excluded.closes_at,
       slot_minutes = excluded.slot_minutes,
+      capacity = excluded.capacity,
       active = excluded.active
-  `).bind(shopCode, weekday, opensAt, closesAt, slotMinutes, active);
+  `).bind(shopCode, weekday, opensAt, closesAt, slotMinutes, capacity, active);
 
   const row = await env.DB.prepare(
     "SELECT * FROM shop_schedule WHERE shop_code = ? AND weekday = ?"

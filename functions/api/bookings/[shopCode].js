@@ -66,7 +66,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   const now = nowLocalString(shop.timezone);
   if (scheduledAt <= now) return fail("时间已过期");
 
-  // 原子插入：用 INSERT ... WHERE NOT EXISTS 防止并发冲突
+  // 原子插入：容量判断防并发冲突（同一时段重叠预约数 < 当日 capacity）
   try {
     const end = addMinutes(scheduledAt, service.duration_min);
     const result = await env.DB.prepare(`
@@ -74,21 +74,26 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
         (shop_code, service_id, customer_name, customer_phone,
          scheduled_at, duration_min, status, note, customer_email)
       SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?
-      WHERE NOT EXISTS (
-        SELECT 1 FROM bookings
-        WHERE shop_code = ?
-          AND status IN ('pending','confirmed','called','done')
-          AND scheduled_at < ?
-          AND datetime(scheduled_at, '+' || duration_min || ' minutes') > ?
+      WHERE (
+        SELECT COUNT(*) FROM bookings b
+        WHERE b.shop_code = ?
+          AND b.status IN ('pending','confirmed','called','done')
+          AND b.scheduled_at < ?
+          AND datetime(b.scheduled_at, '+' || b.duration_min || ' minutes') > ?
+      ) < (
+        SELECT COALESCE(MAX(capacity), 1) FROM shop_schedule
+        WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
       )
     `).bind(
       shopCode, serviceId, name, phone, scheduledAt, service.duration_min, note, email,
-      shopCode, end, scheduledAt
+      shopCode, end, scheduledAt,
+      shopCode, date
     ).run();
 
     const id = result.meta.last_row_id;
-    if (!id) {
-      return fail("该时间段刚被占用，请重新选择", 409);
+    // 用 changes 判断插入是否成功（本地 miniflare 的 last_row_id 在 0 行插入时不可靠）
+    if (!result.meta.changes || !id) {
+      return fail("该时段容量已满，请重新选择", 409);
     }
 
     // 确认邮件：可插拔，未配置 RESEND_API_KEY 时静默跳过；失败不影响预约结果

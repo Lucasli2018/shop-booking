@@ -57,6 +57,7 @@ async function ensureDatabase(env) {
         opens_at TEXT NOT NULL,
         closes_at TEXT NOT NULL,
         slot_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_minutes IN (15, 30, 45, 60, 90, 120)),
+        capacity INTEGER NOT NULL DEFAULT 1 CHECK (capacity BETWEEN 1 AND 20),
         active INTEGER NOT NULL DEFAULT 1,
         UNIQUE(shop_code, weekday)
       )`,
@@ -124,6 +125,7 @@ async function ensureDatabase(env) {
     const upgrades = [
       { table: "services", column: "category", ddl: "ALTER TABLE services ADD COLUMN category TEXT" },
       { table: "bookings", column: "customer_email", ddl: "ALTER TABLE bookings ADD COLUMN customer_email TEXT" },
+      { table: "shop_schedule", column: "capacity", ddl: "ALTER TABLE shop_schedule ADD COLUMN capacity INTEGER NOT NULL DEFAULT 1" },
     ];
     for (const u of upgrades) {
       const cols = await env.DB.prepare(`PRAGMA table_info(${u.table})`).all();
