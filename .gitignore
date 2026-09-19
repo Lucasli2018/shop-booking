@@ -1,6 +1,6 @@
 # Cloudflare 本地状态（含锁文件，避免误提交）
 .wrangler/
-.wrangler-dev/
+.wrangler-dev*/
 .wrangler-dev-state/
 
 # 依赖

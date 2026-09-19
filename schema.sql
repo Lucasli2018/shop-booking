@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS services (
   description  TEXT,
   duration_min INTEGER NOT NULL CHECK (duration_min > 0),
   price_cents  INTEGER,                          -- 0 或 NULL = 免费
+  category     TEXT,                             -- 自由文本分类（如 剪发/染烫/护理），NULL 视为「其他」
   sort_order   INTEGER NOT NULL DEFAULT 0,
   active       INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   status         TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending','confirmed','called','done','cancelled','rejected')),
   note           TEXT,
+  customer_email TEXT,                          -- 可选，预约确认邮件发送地址
   cancelled_at   TEXT,
   rejected_at    TEXT,
   called_at      TEXT,
