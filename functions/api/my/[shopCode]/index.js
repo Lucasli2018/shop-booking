@@ -19,7 +19,7 @@ export async function onRequestGet({ request, env, params }) {
   if (!PHONE_RE.test(phone)) return fail("手机号格式不正确", 400);
 
   const rows = await env.DB.prepare(`
-    SELECT b.id, b.customer_name, b.customer_phone, b.scheduled_at,
+    SELECT b.id, b.service_id, b.customer_name, b.customer_phone, b.scheduled_at,
            b.status, b.note, s.name AS serviceName
     FROM bookings b
     JOIN services s ON s.id = b.service_id
@@ -30,6 +30,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const bookings = rows.results.map(row => ({
     id: row.id,
+    serviceId: row.service_id,
     serviceName: row.serviceName,
     scheduledAt: row.scheduled_at,
     customerName: row.customer_name,
