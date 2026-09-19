@@ -1,7 +1,6 @@
--- 0000_init.sql — 初始 schema（与原始 schema.sql 一致）
+-- 0000_init.sql — 初始 schema
 -- 适用：全新数据库（wrangler d1 migrations apply shop-booking-db --remote）
 
-PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS shops (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

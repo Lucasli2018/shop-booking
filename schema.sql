@@ -1,9 +1,11 @@
--- shop-booking D1 初始化 schema
--- 部署：wrangler d1 migrations apply shop-booking-db --local
--- 或 wrangler d1 execute shop-booking-db --local --file=schema.sql
-
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+-- shop-booking D1 初始化 schema（全量快照 = migrations 0000~0002 依序应用后的最终态）
+--
+-- 【整合说明】数据库初始化只有一个入口，二选一：
+--   A. 全新库（推荐）：wrangler d1 execute shop-booking-db --remote --file=schema.sql
+--   B. 版本化：wrangler d1 migrations apply shop-booking-db --remote（按 migrations/ 序号增量应用）
+--   两者结果一致。已有旧库请走 B；本地开发无需执行（_middleware 首访自动建表）。
+--
+-- 注意：不含 PRAGMA——D1 自管 WAL/外键，远端执行 journal_mode 等会报错。
 
 -- ============ 店铺 ============
 CREATE TABLE IF NOT EXISTS shops (
@@ -115,13 +117,13 @@ VALUES (
 );
 
 -- 服务
-INSERT INTO services(shop_code, name, description, duration_min, price_cents, sort_order) VALUES
-  ('tonys-hair', '男士精剪',       '基础剪发 + 造型', 30,  6800, 10),
-  ('tonys-hair', '女士精剪 + 造型', '剪发 + 吹风造型', 60, 12800, 20),
-  ('tonys-hair', '染发（含洗护）',   '染发 + 洗护一套', 120, 38800, 30),
-  ('tonys-hair', '烫发（含剪发）',   '烫发 + 剪发',     180, 58800, 40),
-  ('tonys-hair', '头皮护理',         '深层清洁 + 按摩', 45, 28800, 50),
-  ('tonys-hair', '洗吹造型',         '洗发 + 吹风',     30,  2800, 60);
+INSERT INTO services(shop_code, name, description, duration_min, price_cents, category, sort_order) VALUES
+  ('tonys-hair', '男士精剪',       '基础剪发 + 造型', 30,  6800, '剪发', 10),
+  ('tonys-hair', '女士精剪 + 造型', '剪发 + 吹风造型', 60, 12800, '剪发', 20),
+  ('tonys-hair', '染发（含洗护）',   '染发 + 洗护一套', 120, 38800, '染烫', 30),
+  ('tonys-hair', '烫发（含剪发）',   '烫发 + 剪发',     180, 58800, '染烫', 40),
+  ('tonys-hair', '头皮护理',         '深层清洁 + 按摩', 45, 28800, '护理', 50),
+  ('tonys-hair', '洗吹造型',         '洗发 + 吹风',     30,  2800, '护理', 60);
 
 -- 营业时间表（周一到周日，09:00-21:00，30 分钟一档）
 INSERT INTO shop_schedule(shop_code, weekday, opens_at, closes_at, slot_minutes) VALUES

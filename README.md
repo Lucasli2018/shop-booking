@@ -354,6 +354,8 @@ VALUES ('my-shop', 1, '09:00', '21:00', 30);
 
 ## 数据库迁移
 
+- **一键初始化（推荐）**：`node scripts/init-d1.mjs`（需 `CLOUDFLARE_API_TOKEN` 环境变量，D1 Edit 权限；
+  加 `--drop` 先清空重建。脚本自动按名字找库、逐条执行 schema.sql、校验中文与表结构）
 - **全新数据库**：`wrangler d1 execute shop-booking-db --remote --file=schema.sql`（全量快照，一步到位）
 - **已有数据库升级**：把 `migrations/` 里的 SQL 按序号执行（Cloudflare Dashboard → D1 → SQL 编辑器，或 `wrangler d1 migrations apply shop-booking-db --remote`）
 - **本地开发**：无需手动操作，`_middleware.js` 首次访问自动建表 + 幂等补列（不区分分支，
