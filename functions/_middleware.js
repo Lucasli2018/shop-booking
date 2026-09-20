@@ -1,8 +1,11 @@
 // 全局中间件：CORS、错误兜底、本地开发自动建表
 // 注意：Pages Functions 里的 _middleware.js 会在每个请求前执行
 
+import { hashPassword, genSalt } from "./_shared/crypto.js";
+
 let initializing = false;
 let dbReady = false;
+let accountsReady = false;
 
 async function ensureDatabase(env) {
   if (dbReady || initializing) return;
@@ -29,8 +32,6 @@ async function ensureDatabase(env) {
         cover_key TEXT,
         phone TEXT,
         address TEXT,
-        pin_hash TEXT NOT NULL,
-        pin_salt TEXT NOT NULL,
         timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
         status TEXT NOT NULL DEFAULT 'active',
         created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
@@ -89,17 +90,31 @@ async function ensureDatabase(env) {
       `CREATE TABLE IF NOT EXISTS admin_sessions (
         token TEXT PRIMARY KEY,
         shop_code TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+        account_id INTEGER REFERENCES admin_accounts(id) ON DELETE CASCADE,
         created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
         expires_at TEXT NOT NULL
       )`,
       `CREATE INDEX IF NOT EXISTS idx_admin_sessions_shop
         ON admin_sessions(shop_code, expires_at)`,
 
+      // --- 账号表（账号 + 密码登录，替代原单 PIN）---
+      `CREATE TABLE IF NOT EXISTS admin_accounts (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_code     TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+        username      TEXT NOT NULL,
+        pass_hash     TEXT NOT NULL,
+        pass_salt     TEXT NOT NULL,
+        role          TEXT NOT NULL DEFAULT 'owner',
+        last_login_at TEXT,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_accounts_shop_user
+        ON admin_accounts(shop_code, username)`,
+
       // --- Seed ---
-      `INSERT OR IGNORE INTO shops(code, name, intro, phone, address, pin_hash, pin_salt, timezone, status)
+      `INSERT OR IGNORE INTO shops(code, name, intro, phone, address, timezone, status)
         VALUES ('tonys-hair', 'Tony''s 美发', '精致剪裁 / 染发烫发 / 头皮护理', '+86-138-0000-0000',
-                '上海市黄浦区南京东路 100 号 3 楼', '__SEED_PIN_UNSET__', 'tonys-seed-salt-2026',
-                'Asia/Shanghai', 'active')`,
+                '上海市黄浦区南京东路 100 号 3 楼', 'Asia/Shanghai', 'active')`,
       `INSERT OR IGNORE INTO services(shop_code, name, description, duration_min, price_cents, category, sort_order) VALUES
         ('tonys-hair', '男士精剪', '基础剪发 + 造型', 30, 6800, '剪发', 10),
         ('tonys-hair', '女士精剪 + 造型', '剪发 + 吹风造型', 60, 12800, '剪发', 20),
@@ -156,6 +171,59 @@ async function ensureDatabase(env) {
   }
 }
 
+// 账号表：幂等建表 + 给没有任何账号的店铺播种默认 admin / admin123
+// 每次冷启动执行一次（accountsReady 兜底），对已有库安全。
+async function ensureAccounts(env) {
+  if (accountsReady) return;
+  try {
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS admin_accounts (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_code     TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+        username      TEXT NOT NULL,
+        pass_hash     TEXT NOT NULL,
+        pass_salt     TEXT NOT NULL,
+        role          TEXT NOT NULL DEFAULT 'owner',
+        last_login_at TEXT,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+      )
+    `).run();
+    await env.DB.prepare(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_accounts_shop_user
+        ON admin_accounts(shop_code, username)
+    `).run();
+
+    // 老库补 account_id 列（会话绑定账户）
+    const cols = await env.DB.prepare(`PRAGMA table_info(admin_sessions)`).all();
+    if (!cols.results.some(c => c.name === "account_id")) {
+      await env.DB.prepare(
+        `ALTER TABLE admin_sessions ADD COLUMN account_id INTEGER REFERENCES admin_accounts(id)`
+      ).run();
+      console.log("[middleware] 已升级 admin_sessions.account_id");
+    }
+
+    // 给没有任何账号的店铺播种默认账号
+    const shops = await env.DB.prepare(`SELECT code FROM shops WHERE status = 'active'`).all();
+    for (const shop of (shops.results || [])) {
+      const cnt = await env.DB.prepare(
+        `SELECT COUNT(*) AS c FROM admin_accounts WHERE shop_code = ?`
+      ).bind(shop.code).first();
+      if (cnt && cnt.c === 0) {
+        const salt = genSalt(16);
+        const hash = await hashPassword("admin123", salt);
+        await env.DB.prepare(
+          `INSERT INTO admin_accounts(shop_code, username, pass_hash, pass_salt, role, created_at)
+           VALUES (?, 'admin', ?, ?, 'owner', datetime('now', '+8 hours'))`
+        ).bind(shop.code, hash, salt).run();
+        console.log(`[middleware] 为店铺 ${shop.code} 播种默认账号 admin / admin123`);
+      }
+    }
+    accountsReady = true;
+  } catch (err) {
+    console.error("[middleware] 账号表初始化失败:", err);
+  }
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -176,9 +244,12 @@ export async function onRequest(context) {
     });
   }
 
-  // 首次访问自动建表（不区分分支：git 化后本地 branch 是 master，
-  // 生产库已有 shops 表时会直接跳过，仅多一次轻量查询）
-  await ensureDatabase(env);
+// 首次访问自动建表（不区分分支：git 化后本地 branch 是 master，
+// 生产库已有 shops 表时会直接跳过，仅多一次轻量查询）
+await ensureDatabase(env);
+
+// 账号表幂等建表 + 默认账号播种（每次冷启动执行，安全幂等）
+await ensureAccounts(env);
 
   // 响应加 CORS 头
   const originalNext = context.next;

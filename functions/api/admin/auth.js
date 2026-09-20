@@ -1,16 +1,14 @@
 // POST /api/admin/auth?shopCode=xxx
-// 登录：校验 PIN，返回 session token
+// 账号密码登录：校验用户名 + 密码，返回 session token
 //
-// Body: { pin: "123456" }
-// 返回: { token, shop, expiresIn }
-//
-// 首次部署：如果 pin_hash = '__SEED_PIN_UNSET__'，接受 pin='123456' 并写入 hash
+// Body: { username: "admin", password: "admin123" }
+// 返回: { token, shop, account: {username, role}, expiresIn }
 //
 // 简单 rate-limit：同 shopCode 每 15 分钟最多 20 次尝试
 // 用内存 Map（每个 Worker 实例独立），Cloudflare 免费够用；
 // 严格的话改用 KV 或 D1 计数。
 
-import { hashPin, genToken } from "../../_shared/crypto.js";
+import { verifyPassword, genToken } from "../../_shared/crypto.js";
 import { json, fail, readJson, requireShop } from "../../_shared/helpers.js";
 
 // 内存 rate-limit（每个 Worker isolate 独立）
@@ -50,44 +48,44 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const body = await readJson(request);
-  const pin = body && body.pin ? String(body.pin).trim() : "";
+  const username = body && body.username ? String(body.username).trim().toLowerCase() : "";
+  const password = body && body.password ? String(body.password) : "";
 
-  if (!/^\d{6,8}$/.test(pin)) {
+  if (username.length < 3 || username.length > 32) {
     recordAttempt(shopCode, false);
-    return fail("PIN 必须是 6-8 位数字", 400);
+    return fail("用户名格式不正确（3-32 位）", 400);
+  }
+  if (password.length < 6 || password.length > 64) {
+    recordAttempt(shopCode, false);
+    return fail("密码长度需 6-64 位", 400);
   }
 
-  // 计算 hash 并比对
-  let pinHash;
-  let isNew = false;
+  // 查账户
+  const account = await env.DB.prepare(
+    "SELECT * FROM admin_accounts WHERE shop_code = ? AND username = ?"
+  ).bind(shopCode, username).first();
 
-  if (shop.pin_hash === "__SEED_PIN_UNSET__") {
-    // 首次部署：接受任意合法 PIN 作为初始 PIN，写入 hash
-    isNew = true;
-    pinHash = await hashPin(pin, shop.pin_salt);
-    await env.DB.prepare(
-      "UPDATE shops SET pin_hash = ?, updated_at = ? WHERE code = ?"
-    ).bind(pinHash, new Date().toISOString().slice(0, 19).replace("T", " "), shopCode).run();
-  } else {
-    pinHash = await hashPin(pin, shop.pin_salt);
-    if (pinHash !== shop.pin_hash) {
-      recordAttempt(shopCode, false);
-      return fail("PIN 错误", 401);
-    }
+  if (!account || !(await verifyPassword(password, account.pass_salt, account.pass_hash))) {
+    recordAttempt(shopCode, false);
+    return fail("用户名或密码错误", 401);
   }
 
   recordAttempt(shopCode, true);
 
-  // 创建 session
+  // 更新最后登录时间
+  const nowStr = new Date().toISOString().slice(0, 19).replace("T", " ");
+  await env.DB.prepare(
+    "UPDATE admin_accounts SET last_login_at = ? WHERE id = ?"
+  ).bind(nowStr, account.id).run();
+
+  // 创建 session（绑定 account_id）
   const token = genToken(32);
-  const now = new Date();
-  const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const nowStr = now.toISOString().slice(0, 19).replace("T", " ");
+  const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const expiresStr = expires.toISOString().slice(0, 19).replace("T", " ");
 
   await env.DB.prepare(
-    "INSERT INTO admin_sessions (token, shop_code, created_at, expires_at) VALUES (?, ?, ?, ?)"
-  ).bind(token, shopCode, nowStr, expiresStr).run();
+    "INSERT INTO admin_sessions (token, shop_code, account_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
+  ).bind(token, shopCode, account.id, nowStr, expiresStr).run();
 
   // 清理过期 session（顺手做）
   await env.DB.prepare(
@@ -103,7 +101,11 @@ export async function onRequestPost({ request, env, params }) {
       phone: shop.phone,
       address: shop.address,
     },
-    isNewPin: isNew,
+    account: {
+      id: account.id,
+      username: account.username,
+      role: account.role,
+    },
     expiresIn: 86400,
   });
 }

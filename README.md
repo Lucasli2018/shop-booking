@@ -50,7 +50,7 @@ wrangler d1 execute shop-booking-db --remote --file=schema.sql
 - 一个店铺 `tonys-hair`（Tony's 美发）
 - 6 个服务
 - 7 天营业时间（周一到周日 09:00-21:00，30 分钟一档）
-- **初始 PIN = `123456`**（首次登录时会自动写入 hash，之后可在后台修改）
+- **默认账号 `admin` / 密码 `admin123`**（首次请求由 `_middleware` 自动播种，首次登录后请在后台修改密码）
 
 ### 5. 本地开发
 
@@ -67,7 +67,7 @@ wrangler pages dev --port 8787 --persist-to ./.wrangler-dev
 打开：
 - 顾客页：<http://localhost:8787/?shop=tonys-hair>
 - 排队页：<http://localhost:8787/queue.html?shop=tonys-hair>
-- 商家后台：<http://localhost:8787/admin.html?shop=tonys-hair>（PIN: `123456`）
+- 商家后台：<http://localhost:8787/admin.html?shop=tonys-hair>（账号 `admin` / 密码 `admin123`）
 
 ### 6. 部署到 Cloudflare
 
@@ -92,14 +92,16 @@ shop-booking/
 ├── migrations/                # D1 增量迁移（已有库升级用，见「数据库迁移」）
 │   ├── 0000_init.sql
 │   ├── 0001_service_category.sql
-│   └── 0002_booking_customer_email.sql
+│   ├── 0002_booking_customer_email.sql
+│   ├── 0003_schedule_capacity.sql
+│   └── 0004_admin_accounts.sql
 ├── tests/
 │   └── probe.js               # 无头浏览器页面探针（Node22 原生 WebSocket + CDP）
 ├── README.md
 ├── functions/                 # Pages Functions（后端）
 │   ├── _middleware.js         # 全局中间件：CORS + 首访自动建表/幂等升级 + 日志
 │   ├── _shared/               # 共享工具
-│   │   ├── crypto.js          # HMAC-SHA256 PIN hash、token 生成
+│   │   ├── crypto.js          # HMAC-SHA256 密码 hash、token 生成
 │   │   └── helpers.js         # JSON 响应、session 校验、时间工具
 │   ├── _lib/
 │   │   └── email.js           # Resend 邮件（可插拔，未配置即跳过）
@@ -110,8 +112,8 @@ shop-booking/
 │       ├── queue/             # 顾客：排队状态（公开）
 │       ├── my/                # 顾客：我的预约（查询/取消/改期，手机号弱校验）
 │       └── admin/             # 商家后台
-│           ├── auth.js        # PIN 登录
-│           ├── _guard.js      # Session 守卫（requireAdmin）
+│           ├── auth.js        # 账号密码登录
+│           ├── _guard.js      # Session 守卫（requireAdmin / requireOwner）
 │           ├── image/         # 图片读取
 │           └── [shopCode]/    # 店铺级后台接口
 │               ├── bookings.js       # 预约列表（支持 date 单日 / from+to 区间）
@@ -119,13 +121,16 @@ shop-booking/
 │               ├── services.js       # 服务 CRUD（含分类）
 │               ├── services/[id].js
 │               ├── schedule.js       # 营业时间
-│               ├── profile.js        # 店铺信息 + 改 PIN
+│               ├── profile.js        # 店铺信息
+│               ├── password.js       # 修改密码（当前账号）
+│               ├── accounts.js       # 账号列表 / 新增（仅店主）
+│               ├── accounts/[id].js   # 删除账号（仅店主）
 │               ├── upload.js         # 图片上传
 │               └── queue.js          # 后台排队视图
 └── public/                    # 静态前端
     ├── index.html             # 顾客预约页
     ├── queue.html             # 排队叫号页（5s 轮询）
-    ├── admin.html             # 商家后台（PIN 登录 → 5 个 Tab）
+    ├── admin.html             # 商家后台（账号密码登录 → 5 个 Tab）
     ├── css/style.css          # 全局样式（奶油+柔粉+薄荷绿）
     └── js/
         ├── api.js             # API client + AdminClient + showToast
@@ -154,13 +159,17 @@ shop-booking/
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | `/api/admin/auth?shopCode=` | PIN 登录 → 返回 token |
+| POST | `/api/admin/auth?shopCode=` | 账号密码登录 → 返回 token |
 | GET | `/api/admin/:shopCode/bookings?date&status` | 预约列表 + 今日统计 |
 | POST | `/api/admin/:shopCode/bookings/:id` | 状态变更，body: `{"action":"confirmed"}` |
 | GET/POST | `/api/admin/:shopCode/services` | 服务列表 / 创建 |
 | GET/PUT/DELETE | `/api/admin/:shopCode/services/:id` | 服务详情 / 更新 / 软删除 |
 | GET/POST | `/api/admin/:shopCode/schedule` | 营业时间 / upsert |
-| GET/PUT | `/api/admin/:shopCode/profile` | 店铺信息 / 更新（含改 PIN） |
+| GET/PUT | `/api/admin/:shopCode/profile` | 店铺信息 / 更新 |
+| PUT | `/api/admin/:shopCode/password` | 修改当前账号密码，body: `{"currentPassword","newPassword"}` |
+| GET | `/api/admin/:shopCode/accounts` | 账号列表（仅店主） |
+| POST | `/api/admin/:shopCode/accounts` | 新增账号，body: `{"username","password","role"}`（仅店主） |
+| DELETE | `/api/admin/:shopCode/accounts/:id` | 删除账号（仅店主，不能删自己/最后一个店主） |
 | POST | `/api/admin/:shopCode/upload` | 上传图片到 R2（multipart，5MB） |
 | GET | `/api/admin/image/:shopCode/:key` | 读取图片 |
 | GET | `/api/admin/:shopCode/queue` | 后台排队视图（含 pending） |
@@ -180,13 +189,14 @@ shop-booking/
 ## 数据模型
 
 ```sql
-shops             店铺（code, name, intro, logo_key, cover_key, pin_hash, pin_salt, timezone, status）
+shops             店铺（code, name, intro, logo_key, cover_key, timezone, status）
 services          服务项目（shop_code, name, description, duration_min, price_cents, sort_order, active）
 shop_schedule     营业时间（shop_code, weekday 0-6, opens_at, closes_at, slot_minutes, active）
 bookings          预约（shop_code, service_id, customer_name, customer_phone,
                    scheduled_at 'YYYY-MM-DD HH:MM', duration_min, status, note,
                    cancelled_at, rejected_at, called_at, done_at）
-admin_sessions    后台会话（token, shop_code, created_at, expires_at）
+admin_accounts    后台账号（shop_code, username, pass_hash, pass_salt, role, last_login_at, created_at）
+admin_sessions    后台会话（token, shop_code, account_id, created_at, expires_at）
 ```
 
 **预约状态机：**
@@ -221,12 +231,13 @@ WHERE NOT EXISTS (
 
 如果时间段被占用，`last_row_id = 0`，返回 409。
 
-### 2. PIN 安全
+### 2. 账号密码安全
 
-- HMAC-SHA256(pin, salt) 存储，salt 每店铺随机生成（16 字节 hex）
+- 每个店铺可有多个账号（`admin_accounts`），含 `owner` / `staff` 角色
+- 密码用 HMAC-SHA256(password, salt) 存储，salt 每账户随机生成（16 字节 hex）
 - 内存 rate-limit：同 shopCode 15 分钟内最多 20 次尝试（429）
-- 首次部署：`pin_hash = '__SEED_PIN_UNSET__'`，首次登录用 PIN `123456` 自动写入真实 hash
-- 支持后台修改 PIN（`PUT /api/admin/:shopCode/profile` + `{"newPin":"..."}`），生成新 salt
+- 默认账号 `admin` / `admin123` 由 `_middleware.ensureAccounts` 在运行时播种（仅当该店铺无任何账号时）
+- 店主可在后台「账号管理」新增/删除账号；修改密码走 `PUT /api/admin/:shopCode/password`
 
 ### 3. Session
 
@@ -262,8 +273,8 @@ WHERE NOT EXISTS (
 - [ ] `wrangler d1 execute shop-booking-db --remote --file=schema.sql` 已执行（生产 D1 有数据）
 - [ ] `wrangler pages deploy . --project-name=shop-booking` 已执行
 - [ ] 打开 `https://<project>.pages.dev/?shop=tonys-hair` 看到服务列表
-- [ ] 打开 `https://<project>.pages.dev/admin.html?shop=tonys-hair`，用 PIN `123456` 登录成功
-- [ ] 登录后在后台修改 PIN（设置 → 修改 PIN）
+- [ ] 打开 `https://<project>.pages.dev/admin.html?shop=tonys-hair`，用账号 `admin` / 密码 `admin123` 登录成功
+- [ ] 登录后在后台修改密码（设置 → 修改密码）
 
 ---
 
@@ -282,21 +293,28 @@ wrangler pages dev --port 8787 --persist-to ./.wrangler-dev
 ```
 用独立的 `.wrangler-dev` 目录。
 
-### Q: 后台 PIN 忘了怎么办？
+### Q: 后台密码忘了 / 默认账号登录不了怎么办？
 
-用 D1 SQL 编辑器（Cloudflare Dashboard → D1 → 你的数据库 → SQL）：
+用 D1 SQL 编辑器（Cloudflare Dashboard → D1 → 你的数据库 → SQL）重置默认账号密码为 `admin123`：
 ```sql
-UPDATE shops SET pin_hash = '__SEED_PIN_UNSET__' WHERE code = 'tonys-hair';
+-- 重新给店铺播种默认账号（admin / admin123）
+INSERT OR REPLACE INTO admin_accounts(shop_code, username, pass_hash, pass_salt, role, created_at)
+SELECT 'tonys-hair', 'admin',
+       hex(hmac_sha256('admin123', s.val)), s.val, 'owner', datetime('now','+8 hours')
+FROM (SELECT 'replace-with-random-16-hex' AS val) s;
 ```
-然后用 PIN `123456` 登录，再在后台修改。
+若表结构与上述不一致，更简单的方式是删除该店铺全部账号后让运行时重新播种：
+```sql
+DELETE FROM admin_accounts WHERE shop_code = 'tonys-hair';
+-- 下次请求 _middleware.ensureAccounts 会自动重建 admin / admin123
+```
 
 ### Q: 怎么加第二个店铺？
 
 用 D1 SQL 编辑器：
 ```sql
-INSERT INTO shops(code, name, intro, pin_hash, pin_salt, timezone, status)
-VALUES ('my-shop', '我的店', '介绍', '__SEED_PIN_UNSET__',
-        replace(upper(hex(randomblob(16))), ' ', ''), 'Asia/Shanghai', 'active');
+INSERT INTO shops(code, name, intro, timezone, status)
+VALUES ('my-shop', '我的店', '介绍', 'Asia/Shanghai', 'active');
 
 -- 添加服务
 INSERT INTO services(shop_code, name, duration_min, price_cents, sort_order)
@@ -306,6 +324,13 @@ VALUES ('my-shop', '剪发', 30, 5000, 10);
 INSERT INTO shop_schedule(shop_code, weekday, opens_at, closes_at, slot_minutes)
 VALUES ('my-shop', 1, '09:00', '21:00', 30);
 -- ... 重复 weekday 2-6
+
+-- 给新店铺创建默认账号 admin / admin123（也可等运行时自动播种）
+-- 访问后首次请求 _middleware.ensureAccounts 会自动建号；如需手动：
+INSERT INTO admin_accounts(shop_code, username, pass_hash, pass_salt, role, created_at)
+VALUES ('my-shop', 'admin',
+        '<HMAC-SHA256(admin123, <随机16位hex>)>', '<随机16位hex>', 'owner',
+        datetime('now','+8 hours'));
 ```
 访问 `https://<project>.pages.dev/?shop=my-shop`。
 
@@ -335,6 +360,9 @@ VALUES ('my-shop', 1, '09:00', '21:00', 30);
 
 ## 版本历史
 
+- **v0.3.0（2026-09-20）**：登录由「单 PIN」升级为「账号 + 密码」多账户体系（migration 0004）；
+  新增 `admin_accounts` 表（owner/staff 角色）、`admin_sessions.account_id` 绑定；
+  后台支持「修改密码」与「账号管理」（店主可增删子账号）；默认账号 `admin` / `admin123` 运行时自动播种。
 - **v0.2.0（2026-09-20）**：时段容量（`shop_schedule.capacity`，多师傅/工位并行，migration 0003）；
   数据统计仪表盘（后台「📊 统计」tab：今日分状态/营收、7/30 天完成率与取消率、热门服务 TOP5、近 7 天趋势图）；
   预约容量判断 SQL 原子化（slots / bookings / reschedule 三处统一）。

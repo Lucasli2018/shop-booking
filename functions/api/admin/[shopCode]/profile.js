@@ -1,15 +1,10 @@
 // GET  /api/admin/:shopCode/profile   — 店铺信息
-// PUT  /api/admin/:shopCode/profile   — 更新店铺信息（含改 PIN）
+// PUT  /api/admin/:shopCode/profile   — 更新店铺信息
 //
-// PUT body:
-// {
-//   name?, intro?, phone?, address?, timezone?,
-//   newPin?: "6-8 位数字"     // 可选，改 PIN
-// }
+// 改密码走独立的 PUT /api/admin/:shopCode/password
 
 import { requireAdmin } from "../_guard.js";
 import { json, readJson } from "../../../_shared/helpers.js";
-import { hashPin, genSalt } from "../../../_shared/crypto.js";
 
 export async function onRequestGet({ request, env, params }) {
   const { shopCode } = params;
@@ -33,6 +28,7 @@ export async function onRequestGet({ request, env, params }) {
       createdAt: shop.created_at,
       updatedAt: shop.updated_at,
     },
+    account: g.account ? { id: g.account.id, username: g.account.username, role: g.account.role } : null,
   });
 }
 
@@ -64,19 +60,6 @@ export async function onRequestPut({ request, env, params }) {
   r = strField("address", 200); if (r.error) return json({ error: r.error }, 400);
   r = strField("timezone", 50); if (r.error) return json({ error: r.error }, 400);
 
-  // 改 PIN
-  if (body.newPin != null) {
-    const pin = String(body.newPin).trim();
-    if (!/^\d{6,8}$/.test(pin)) {
-      return json({ error: "新 PIN 必须是 6-8 位数字" }, 400);
-    }
-    // 生成新 salt 和 hash
-    const newSalt = genSalt(16);
-    const newHash = await hashPin(pin, newSalt);
-    sets.push("pin_hash = ?"); binds.push(newHash);
-    sets.push("pin_salt = ?"); binds.push(newSalt);
-  }
-
   if (sets.length === 0) return json({ error: "没有要更新的字段" }, 400);
 
   sets.push("updated_at = ?");
@@ -99,6 +82,5 @@ export async function onRequestPut({ request, env, params }) {
       timezone: updated.timezone,
       status: updated.status,
     },
-    pinChanged: body.newPin != null,
   });
 }

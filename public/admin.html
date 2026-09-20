@@ -14,12 +14,12 @@
   <div class="login-card">
     <div class="icon">🔐</div>
     <h1>商家后台</h1>
-    <p id="loginShopName">输入 PIN 登录</p>
-    <input type="password" class="pin-input" id="pinInput" placeholder="PIN" maxlength="8"
-           inputmode="numeric" pattern="[0-9]*">
-    <button class="btn btn-primary btn-block" id="loginBtn">登 录</button>
-    <div id="loginError" class="text-sm text-right" style="color: var(--danger); min-height: 20px;"></div>
-    <div class="text-sm text-muted mt-4">首次登录 PIN = 123456</div>
+    <p id="loginShopName">账号密码登录</p>
+    <input type="text" class="input" id="usernameInput" placeholder="用户名" maxlength="32" autocomplete="username" style="margin-bottom: 12px;">
+    <input type="password" class="input" id="passwordInput" placeholder="密码" maxlength="64" autocomplete="current-password">
+    <button class="btn btn-primary btn-block" id="loginBtn" style="margin-top: 16px;">登 录</button>
+    <div id="loginError" class="text-sm" style="color: var(--danger); min-height: 20px; text-align: right;"></div>
+    <div class="text-sm text-muted mt-4">首次登录：账号 <b>admin</b> / 密码 <b>admin123</b></div>
   </div>
 </div>
 
@@ -215,14 +215,47 @@
         </div>
       </div>
 
-      <div class="card">
-        <h3 class="card-title">修改 PIN</h3>
+      <div class="card mb-4">
+        <h3 class="card-title">修改密码</h3>
         <div class="field">
-          <label class="field-label">新 PIN（6-8 位数字）</label>
-          <input class="input" id="newPin" placeholder="请输入 6-8 位数字" maxlength="8" inputmode="numeric" pattern="[0-9]*">
+          <label class="field-label">当前密码</label>
+          <input type="password" class="input" id="currentPwd" placeholder="当前密码" maxlength="64" autocomplete="current-password">
         </div>
-        <button class="btn btn-primary" id="savePinBtn">🔐 修改 PIN</button>
-        <p class="text-sm text-muted mt-2">提示：修改 PIN 后当前会话仍有效，其他会话需重新登录。</p>
+        <div class="field">
+          <label class="field-label">新密码（6-64 位）</label>
+          <input type="password" class="input" id="newPwd" placeholder="新密码" maxlength="64" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label class="field-label">确认新密码</label>
+          <input type="password" class="input" id="confirmPwd" placeholder="再次输入新密码" maxlength="64" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary" id="savePwdBtn">🔐 修改密码</button>
+        <p class="text-sm text-muted mt-2">提示：修改密码后当前会话仍有效，其他设备需重新登录。</p>
+      </div>
+
+      <div class="card mb-4" id="accountsCard">
+        <h3 class="card-title">账号管理 <span class="text-sm text-muted" style="font-weight:400;">（仅店主）</span></h3>
+        <div id="accountsList" class="mb-3"></div>
+
+        <div class="account-add">
+          <div class="field">
+            <label class="field-label">新增账号用户名</label>
+            <input class="input" id="newAccUser" placeholder="字母/数字/下划线，3-32 位" maxlength="32">
+          </div>
+          <div class="field">
+            <label class="field-label">初始密码（6-64 位）</label>
+            <input type="password" class="input" id="newAccPwd" placeholder="初始密码" maxlength="64" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label class="field-label">角色</label>
+            <select class="select" id="newAccRole">
+              <option value="staff">员工 (staff)</option>
+              <option value="owner">店主 (owner)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="addAccBtn">➕ 新增账号</button>
+        </div>
+        <p class="text-sm text-muted mt-2" id="accountsHint"></p>
       </div>
     </div>
 

@@ -69,7 +69,20 @@ export async function requireSession(env, request, shopCode) {
     return { error: "会话不匹配店铺", status: 403 };
   }
 
-  return { session, token };
+  // 会话绑定的账户（旧会话可能无 account_id，容忍为 null）
+  let account = null;
+  if (session.account_id) {
+    account = await getAccount(env, session.account_id);
+    if (!account) return { error: "账户不存在", status: 401 };
+  }
+
+  return { session, token, accountId: session.account_id || null, account };
+}
+
+export async function getAccount(env, accountId) {
+  if (!accountId) return null;
+  return env.DB.prepare("SELECT * FROM admin_accounts WHERE id = ?")
+    .bind(accountId).first();
 }
 
 // ============ 时间工具 ============

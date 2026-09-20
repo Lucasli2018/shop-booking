@@ -5,6 +5,9 @@ class AdminApp {
     this.shopCode = opts.shopCode || "tonys-hair";
     this.token = localStorage.getItem(`admin-token-${this.shopCode}`) || null;
     this.admin = this.token ? new AdminClient({ shopCode: this.shopCode, token: this.token }) : null;
+    try {
+      this.account = JSON.parse(localStorage.getItem(`admin-account-${this.shopCode}`) || "null");
+    } catch { this.account = null; }
     this.currentTab = "queue";
     this.queueTimer = null;
     this.bookingsTimer = null;
@@ -27,27 +30,35 @@ class AdminApp {
     document.getElementById("loginScreen").classList.remove("hidden");
     document.getElementById("adminScreen").classList.add("hidden");
 
-    const input = document.getElementById("pinInput");
+    const userInput = document.getElementById("usernameInput");
+    const passInput = document.getElementById("passwordInput");
     const btn = document.getElementById("loginBtn");
     const err = document.getElementById("loginError");
 
     const tryLogin = async () => {
-      const pin = input.value.trim();
-      if (!/^\d{6,8}$/.test(pin)) {
-        err.textContent = "PIN 必须是 6-8 位数字";
+      const username = userInput.value.trim();
+      const password = passInput.value;
+      if (username.length < 3) {
+        err.textContent = "请输入用户名";
+        return;
+      }
+      if (password.length < 6) {
+        err.textContent = "请输入密码";
         return;
       }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span> 登录中…';
       err.textContent = "";
       try {
-        const res = await AdminClient.login(this.shopCode, pin);
+        const res = await AdminClient.login(this.shopCode, username, password);
         this.token = res.token;
+        this.account = res.account;
         localStorage.setItem(`admin-token-${this.shopCode}`, this.token);
+        localStorage.setItem(`admin-account-${this.shopCode}`, JSON.stringify(res.account));
         this.admin = new AdminClient({ shopCode: this.shopCode, token: this.token });
         this.showAdmin();
-        if (res.isNewPin) {
-          showToast("PIN 已设置，下次登录请用此 PIN", "success");
+        if (username === "admin" && password === "admin123") {
+          showToast("已用默认密码登录，建议尽快修改密码", "info");
         }
       } catch (e) {
         err.textContent = e.message || "登录失败";
@@ -58,8 +69,10 @@ class AdminApp {
     };
 
     btn.addEventListener("click", tryLogin);
-    input.addEventListener("keypress", e => { if (e.key === "Enter") tryLogin(); });
-    setTimeout(() => input.focus(), 100);
+    const onKey = e => { if (e.key === "Enter") tryLogin(); };
+    userInput.addEventListener("keypress", onKey);
+    passInput.addEventListener("keypress", onKey);
+    setTimeout(() => userInput.focus(), 100);
   }
 
   async showAdmin() {
@@ -75,6 +88,11 @@ class AdminApp {
       if (res.shop.logoUrl) {
         document.getElementById("adminLogo").innerHTML = `<img src="${res.shop.logoUrl}" alt="" style="width:100%;height:100%;object-fit:cover;">`;
       }
+      if (res.account) {
+        this.account = res.account;
+        localStorage.setItem(`admin-account-${this.shopCode}`, JSON.stringify(res.account));
+      }
+      this.toggleAccountsUI();
     } catch (err) {
       // token 可能已失效
       if (err.status === 401) {
@@ -93,6 +111,8 @@ class AdminApp {
     if (this.admin) this.admin.logout();
     this.token = null;
     this.admin = null;
+    this.account = null;
+    localStorage.removeItem(`admin-account-${this.shopCode}`);
     if (this.queueTimer) clearInterval(this.queueTimer);
     if (this.bookingsTimer) clearInterval(this.bookingsTimer);
     this.showLogin();
@@ -136,7 +156,8 @@ class AdminApp {
 
     // 店铺设置
     document.getElementById("saveProfileBtn").addEventListener("click", () => this.saveProfile());
-    document.getElementById("savePinBtn").addEventListener("click", () => this.changePin());
+    document.getElementById("savePwdBtn").addEventListener("click", () => this.changePassword());
+    document.getElementById("addAccBtn").addEventListener("click", () => this.addAccount());
     document.getElementById("logoInput").addEventListener("change", e => this.uploadImage(e.target, "logo"));
     document.getElementById("coverInput").addEventListener("change", e => this.uploadImage(e.target, "cover"));
   }
@@ -157,7 +178,7 @@ class AdminApp {
     if (tab === "services") this.loadServices();
     if (tab === "schedule") this.loadSchedule();
     if (tab === "stats") this.loadStats();
-    if (tab === "profile") this.loadProfile();
+    if (tab === "profile") { this.loadProfile(); this.loadAccounts(); }
   }
 
   // ============ 统计 Tab ============
@@ -681,18 +702,95 @@ class AdminApp {
     }
   }
 
-  async changePin() {
-    const newPin = document.getElementById("newPin").value.trim();
-    if (!/^\d{6,8}$/.test(newPin)) {
-      showToast("PIN 必须是 6-8 位数字", "error");
-      return;
-    }
-    if (!confirm(`确认将 PIN 改为 ${newPin}？`)) return;
+  async changePassword() {
+    const current = document.getElementById("currentPwd").value;
+    const next = document.getElementById("newPwd").value;
+    const confirm = document.getElementById("confirmPwd").value;
+    if (next.length < 6) { showToast("新密码至少 6 位", "error"); return; }
+    if (next !== confirm) { showToast("两次输入的新密码不一致", "error"); return; }
 
     try {
-      await this.admin.updateProfile({ newPin });
-      document.getElementById("newPin").value = "";
-      showToast("PIN 已修改", "success");
+      await this.admin.changePassword(current, next);
+      document.getElementById("currentPwd").value = "";
+      document.getElementById("newPwd").value = "";
+      document.getElementById("confirmPwd").value = "";
+      showToast("密码已修改", "success");
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
+  // ============ 账号管理 ============
+  toggleAccountsUI() {
+    const card = document.getElementById("accountsCard");
+    if (!card) return;
+    const isOwner = this.account && this.account.role === "owner";
+    card.style.display = isOwner ? "" : "none";
+  }
+
+  async loadAccounts() {
+    const list = document.getElementById("accountsList");
+    const hint = document.getElementById("accountsHint");
+    if (!list) return;
+    if (!this.account || this.account.role !== "owner") { list.innerHTML = ""; return; }
+    try {
+      const res = await this.admin.getAccounts();
+      this.renderAccounts(res.accounts || []);
+    } catch (err) {
+      if (err.status === 401) { this.logout(); return; }
+      list.innerHTML = `<div class="text-sm text-muted">加载失败：${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  renderAccounts(accounts) {
+    const list = document.getElementById("accountsList");
+    if (!accounts.length) {
+      list.innerHTML = '<div class="text-sm text-muted">暂无其他账号</div>';
+      return;
+    }
+    list.innerHTML = accounts.map(a => {
+      const isSelf = this.account && a.id === this.account.id;
+      const badge = a.role === "owner"
+        ? '<span class="badge badge-confirmed">店主</span>'
+        : '<span class="badge badge-called">员工</span>';
+      const lastLogin = a.last_login_at ? a.last_login_at : "从未登录";
+      const del = isSelf
+        ? '<span class="text-sm text-muted">（当前账号）</span>'
+        : `<button class="btn btn-danger btn-sm" onclick="app.deleteAccount(${a.id})">🗑️ 删除</button>`;
+      return `
+        <div class="account-row" style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px dashed var(--border);">
+          <strong style="flex:1;">${escapeHtml(a.username)}</strong>
+          ${badge}
+          <span class="text-sm text-muted">${escapeHtml(lastLogin)}</span>
+          ${del}
+        </div>`;
+    }).join("");
+  }
+
+  async addAccount() {
+    const username = document.getElementById("newAccUser").value.trim();
+    const password = document.getElementById("newAccPwd").value;
+    const role = document.getElementById("newAccRole").value;
+    if (username.length < 3) { showToast("用户名至少 3 位", "error"); return; }
+    if (password.length < 6) { showToast("初始密码至少 6 位", "error"); return; }
+
+    try {
+      await this.admin.createAccount(username, password, role);
+      document.getElementById("newAccUser").value = "";
+      document.getElementById("newAccPwd").value = "";
+      showToast("账号已创建", "success");
+      this.loadAccounts();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
+  async deleteAccount(id) {
+    if (!confirm("确认删除该账号？（该账号的会话会一并失效）")) return;
+    try {
+      await this.admin.deleteAccount(id);
+      showToast("已删除", "success");
+      this.loadAccounts();
     } catch (err) {
       showToast(err.message, "error");
     }

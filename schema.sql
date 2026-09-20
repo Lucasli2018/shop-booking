@@ -17,8 +17,6 @@ CREATE TABLE IF NOT EXISTS shops (
   cover_key   TEXT,
   phone       TEXT,
   address     TEXT,
-  pin_hash    TEXT NOT NULL,                     -- PBKDF2(pin, salt) 的十六进制
-  pin_salt    TEXT NOT NULL,
   timezone    TEXT NOT NULL DEFAULT 'Asia/Shanghai',
   status      TEXT NOT NULL DEFAULT 'active',    -- active / paused
   created_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
@@ -89,10 +87,11 @@ CREATE INDEX IF NOT EXISTS idx_bookings_service_time
   ON bookings(service_id, scheduled_at, status);
 
 -- ============ 管理员 session ============
--- 24 小时过期；token 是 32 字节随机 hex
+-- 24 小时过期；token 是 32 字节随机 hex；account_id 绑定登录账户
 CREATE TABLE IF NOT EXISTS admin_sessions (
   token       TEXT PRIMARY KEY,
   shop_code   TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  account_id  INTEGER REFERENCES admin_accounts(id) ON DELETE CASCADE,
   created_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
   expires_at  TEXT NOT NULL
 );
@@ -100,19 +99,33 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_shop
   ON admin_sessions(shop_code, expires_at);
 
+-- ============ 管理员账号 ============
+-- 账号密码登录（替代原单 PIN）：每个店铺可有多账号，含 owner / staff 角色
+-- pass_hash = HMAC-SHA256(password, pass_salt)；salt 每账户随机生成
+CREATE TABLE IF NOT EXISTS admin_accounts (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_code     TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  username      TEXT NOT NULL,
+  pass_hash     TEXT NOT NULL,
+  pass_salt     TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'owner',     -- owner / staff
+  last_login_at TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_accounts_shop_user
+  ON admin_accounts(shop_code, username);
+
 -- ============ 种子数据 ============
 -- 默认店铺：Tony's 美发
--- pin_hash 用 __SEED_PIN_UNSET__ 占位，首次 admin/auth 登录 PIN=123456 时自动写入真实 hash。
--- 之后老板可在后台改 PIN（后续里程碑）。
-INSERT INTO shops(code, name, intro, phone, address, pin_hash, pin_salt, timezone, status)
+-- 账号在运行时由 _middleware.ensureAccounts 播种：admin / admin123（首次登录请修改密码）
+INSERT INTO shops(code, name, intro, phone, address, timezone, status)
 VALUES (
   'tonys-hair',
   'Tony''s 美发',
   '精致剪裁 / 染发烫发 / 头皮护理，二十年理发经验，等你来体验。',
   '+86-138-0000-0000',
   '上海市黄浦区南京东路 100 号 3 楼',
-  '__SEED_PIN_UNSET__',
-  'tonys-seed-salt-2026',
   'Asia/Shanghai',
   'active'
 );
@@ -137,7 +150,7 @@ INSERT INTO shop_schedule(shop_code, weekday, opens_at, closes_at, slot_minutes)
   ('tonys-hair', 0, '10:00', '20:00', 30);
 
 -- 说明：
--- 1) D1 使用 SQLite。seed 里 pin_hash = '__SEED_PIN_UNSET__' 是标记位，
---    首次 admin/auth 登录 PIN=123456 时后端会自动写入 hash 并返回 session。
--- 2) PIN 建议 6-8 位数字，不要暴露。
--- 3) 修改 PIN 的后台 UI 属于 M5+ 里程碑，当前 MVP 先靠 123456 上手。
+-- 1) D1 使用 SQLite。
+-- 2) 账号密码登录：admin_accounts 表存储账号；默认账号 admin/admin123 由运行时播种，
+--    首次登录后请尽快在「店铺设置 → 修改密码」中修改。
+-- 3) 店主可在后台「账号管理」中新增员工(staff)账号、删除账号。

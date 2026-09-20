@@ -75,10 +75,29 @@ class AdminClient extends ApiClient {
   }
 
   // ============ 认证 ============
-  static async login(shopCode, pin) {
+  static async login(shopCode, username, password) {
     const client = new ApiClient({ shopCode });
-    const res = await client.post(`/api/admin/auth?shopCode=${encodeURIComponent(shopCode)}`, { pin });
+    const res = await client.post(`/api/admin/auth?shopCode=${encodeURIComponent(shopCode)}`, {
+      username, password,
+    });
     return res;
+  }
+
+  // ============ 账号与密码 ============
+  async changePassword(currentPassword, newPassword) {
+    return this.put(`/api/admin/${this.shopCode}/password`, { currentPassword, newPassword });
+  }
+
+  async getAccounts() {
+    return this.get(`/api/admin/${this.shopCode}/accounts`);
+  }
+
+  async createAccount(username, password, role = "staff") {
+    return this.post(`/api/admin/${this.shopCode}/accounts`, { username, password, role });
+  }
+
+  async deleteAccount(id) {
+    return this.delete(`/api/admin/${this.shopCode}/accounts/${id}`);
   }
 
   // ============ 预约 ============
