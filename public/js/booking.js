@@ -19,6 +19,7 @@ class BookingApp {
   async init() {
     // 初始化默认日期选择
     this.renderDateRow();
+    this.loadShops();
     this.loadServices();
     this.loadEmployees();
     this.bindEvents();
@@ -36,6 +37,27 @@ class BookingApp {
         emps.map(e => `<option value="${e.id}">${escapeHtml(e.name)}${e.title ? " · " + escapeHtml(e.title) : ""}</option>`).join("");
     } catch (_) {
       // 员工接口失败不阻断预约主流程
+    }
+  }
+
+  // ============ 加载店铺列表（多店铺切换）============
+  async loadShops() {
+    const sel = document.getElementById("shopSwitch");
+    if (!sel) return;
+    try {
+      const res = await ApiClient.getShops();
+      const shops = res.shops || [];
+      sel.innerHTML = shops.map(s =>
+        `<option value="${s.code}" ${s.code === this.shopCode ? "selected" : ""}>${escapeHtml(s.name)}</option>`
+      ).join("");
+      sel.onchange = () => {
+        const code = sel.value;
+        if (code && code !== this.shopCode) {
+          location.href = `/?shop=${encodeURIComponent(code)}`;
+        }
+      };
+    } catch (_) {
+      // 店铺列表失败不阻断主流程
     }
   }
 

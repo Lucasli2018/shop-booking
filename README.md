@@ -109,7 +109,9 @@ shop-booking/
 │   │   └── email.js           # Resend 邮件（可插拔，未配置即跳过）
 │   └── api/
 │       ├── services/          # 顾客：服务列表
+│       ├── shops/             # 顾客：店铺列表（多店铺切换）
 │       ├── employees/         # 顾客：在岗员工列表（预约选师傅用）
+│       ├── public-image/      # 顾客：公开图片（店铺封面 / 员工头像）
 │       ├── slots/             # 顾客：可用时间段生成
 │       ├── bookings/          # 顾客：提交预约
 │       ├── queue/             # 顾客：排队状态（公开）
@@ -153,7 +155,9 @@ shop-booking/
 | Method | Path | 说明 |
 |--------|------|------|
 | GET | `/api/services/:shopCode` | 服务列表 + 店铺信息 |
+| GET | `/api/shops` | 店铺列表（多店铺切换用，返回 active 店铺 + 公开图片 URL） |
 | GET | `/api/employees/:shopCode` | 在岗员工列表（顾客预约选师傅用，按需返回头像 URL） |
+| GET | `/api/public-image/:shopCode/:key` | 公开读取 R2 图片（店铺封面 / 员工头像，校验 `shopCode-` 前缀防越权） |
 | GET | `/api/slots/:shopCode?serviceId&date` | 可用时间段（已扣占用 + 已过时段） |
 | POST | `/api/bookings/:shopCode` | 提交预约（原子防并发冲突；可选 `customerEmail` 发确认邮件） |
 | GET | `/api/queue/:shopCode` | 当前排队（顾客轮询用） |
@@ -371,6 +375,9 @@ VALUES ('my-shop', 'admin',
 
 ## 版本历史
 
+- **v0.5.0（2026-09-26）**：多店铺切换 UI（migration 0006）；
+  新增 `GET /api/shops` 公开店铺列表与 `GET /api/public-image/:shopCode/:key` 公开图片接口（校验 `shopCode-` 前缀防越权）；
+  新增演示店铺 `nails-art`（小雅美甲，含服务/营业时间/员工）；顾客首页顶部「切换店铺」下拉，切换即重渲染。
 - **v0.4.0（2026-09-26）**：新增员工/技师管理（migration 0005）；
   新增 `employees` 表（姓名/头衔/简介/头像/排序/在岗状态）与 `bookings.employee_id` 指派字段；
   顾客预约页可「指定师傅（可选）」，下拉拉取在岗员工；后台新增「👥 员工」Tab（列表/新增/编辑/软删）；
@@ -400,7 +407,8 @@ VALUES ('my-shop', 'admin',
 - [ ] 爽约黑名单 / 次卡
 - [x] 员工管理（多个发型师）
 - [ ] 优惠券 / 会员卡
-- [ ] 多店铺切换 UI / 商户自助注册
+- [x] 多店铺切换 UI（顾客端店铺下拉）
+- [ ] 商户自助注册（开店流程 / 多租户账号体系）
 
 ---
 

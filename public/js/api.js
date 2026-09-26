@@ -26,6 +26,11 @@ class ApiClient {
     return this.get(`/api/employees/${this.shopCode}`);
   }
 
+  // 公开：店铺列表（多店铺切换用）
+  static async getShops() {
+    return new ApiClient().get("/api/shops");
+  }
+
   async _request(method, path, opts = {}) {
     const headers = { ...opts.headers };
     const body = opts.body;

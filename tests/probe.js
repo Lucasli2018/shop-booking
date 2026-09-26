@@ -62,6 +62,7 @@ async function main() {
   await new Promise(r => setTimeout(r, 5000));
 
   assert("店铺名渲染", (await evalJs(`document.getElementById("shopName").textContent`)) === "Tony's 美发");
+  assert("店铺切换下拉渲染", (await evalJs(`document.getElementById("shopSwitch")?.options.length`)) >= 2);
   if (results.some(r => !r.ok)) {
     console.log("DEBUG grid:", (await evalJs(`document.getElementById("serviceGrid").innerHTML.slice(0, 300)`)));
     console.log("DEBUG catRow:", (await evalJs(`document.getElementById("categoryRow") ? document.getElementById("categoryRow").innerHTML.slice(0, 200) : "NO ELEMENT"`)));
