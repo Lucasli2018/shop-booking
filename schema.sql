@@ -55,6 +55,25 @@ CREATE TABLE IF NOT EXISTS shop_schedule (
   UNIQUE(shop_code, weekday)
 );
 
+-- ============ 员工 / 技师 ============
+-- 预约时可「指定师傅」：employee 是预约上的指派标签（可空），
+-- 不影响店铺级时段容量（多工位/多师傅并行仍由 shop_schedule.capacity 控制）。
+-- 软删除用 active=0（保留历史预约的归属，硬删除会丢失归属）。
+CREATE TABLE IF NOT EXISTS employees (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  shop_code    TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  name         TEXT NOT NULL,                     -- 师傅姓名
+  title        TEXT,                              -- 头衔/职位，如 高级发型师
+  intro        TEXT,                              -- 简介
+  avatar_key   TEXT,                              -- R2 头像 object key
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  active       INTEGER NOT NULL DEFAULT 1,        -- 1=在岗可约，0=停用（软删）
+  created_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_employees_shop ON employees(shop_code, sort_order, active);
+
 -- ============ 预约 ============
 -- status: pending / confirmed / called / done / cancelled / rejected
 -- scheduled_at: 字符串 'YYYY-MM-DD HH:MM'，shop 本地时间（naive）
@@ -62,6 +81,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   shop_code      TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
   service_id     INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  employee_id    INTEGER REFERENCES employees(id) ON DELETE SET NULL,  -- 指定师傅（可空）
   customer_name  TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
   scheduled_at   TEXT NOT NULL,                  -- 'YYYY-MM-DD HH:MM'
@@ -148,6 +168,12 @@ INSERT INTO shop_schedule(shop_code, weekday, opens_at, closes_at, slot_minutes)
   ('tonys-hair', 5, '09:00', '21:00', 30),
   ('tonys-hair', 6, '10:00', '20:00', 30),
   ('tonys-hair', 0, '10:00', '20:00', 30);
+
+-- 员工（默认在岗可约；顾客预约时可指定师傅）
+INSERT INTO employees(shop_code, name, title, intro, sort_order, active) VALUES
+  ('tonys-hair', 'Tony',    '总监发型师', '二十年经验，擅长日系烫染与轮廓剪裁', 10, 1),
+  ('tonys-hair', 'Lisa',    '高级发型师', '韩式刘海与染发设计',               20, 1),
+  ('tonys-hair', '阿杰',     '洗护技师',   '头皮护理与洗发造型',               30, 1);
 
 -- 说明：
 -- 1) D1 使用 SQLite。

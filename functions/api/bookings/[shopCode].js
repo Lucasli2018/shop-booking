@@ -26,6 +26,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   const name = (body.customerName || "").trim();
   const phone = (body.customerPhone || "").trim();
   const note = body.note ? String(body.note).trim().slice(0, 500) : null;
+  const employeeIdRaw = body.employeeId ? parseInt(body.employeeId, 10) : null;
 
   if (!serviceId) return fail("缺少 serviceId");
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(scheduledAt || "")) {
@@ -50,6 +51,17 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   ).bind(serviceId, shopCode).first();
   if (!service) return fail("服务不存在", 404);
 
+  // 指定师傅（可选）：必须属于本店且在岗
+  let employeeName = null;
+  if (employeeIdRaw) {
+    const emp = await env.DB.prepare(
+      "SELECT id, name, active FROM employees WHERE id = ? AND shop_code = ?"
+    ).bind(employeeIdRaw, shopCode).first();
+    if (!emp) return fail("指定的师傅不存在", 404);
+    if (!emp.active) return fail("该师傅已停用，请重新选择或留空");
+    employeeName = emp.name;
+  }
+
   // 校验日期在营业时间内（快速检查）
   const date = scheduledAt.slice(0, 10);
   const time = scheduledAt.slice(11);
@@ -71,9 +83,9 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
     const end = addMinutes(scheduledAt, service.duration_min);
     const result = await env.DB.prepare(`
       INSERT INTO bookings
-        (shop_code, service_id, customer_name, customer_phone,
+        (shop_code, service_id, employee_id, customer_name, customer_phone,
          scheduled_at, duration_min, status, note, customer_email)
-      SELECT ?, ?, ?, ?, ?, ?, 'pending', ?, ?
+      SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?
       WHERE (
         SELECT COUNT(*) FROM bookings b
         WHERE b.shop_code = ?
@@ -85,7 +97,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
         WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
       )
     `).bind(
-      shopCode, serviceId, name, phone, scheduledAt, service.duration_min, note, email,
+      shopCode, serviceId, employeeIdRaw ?? null, name, phone, scheduledAt, service.duration_min, note, email,
       shopCode, end, scheduledAt,
       shopCode, date
     ).run();
@@ -119,6 +131,8 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
         durationMin: service.duration_min,
         status: "pending",
         note,
+        employeeId: employeeIdRaw || null,
+        employeeName,
         serviceName: service.name,
         priceCents: service.price_cents,
         shopName: shop.name,

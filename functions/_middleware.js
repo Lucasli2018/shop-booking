@@ -62,10 +62,25 @@ async function ensureDatabase(env) {
         active INTEGER NOT NULL DEFAULT 1,
         UNIQUE(shop_code, weekday)
       )`,
+      `CREATE TABLE IF NOT EXISTS employees (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_code    TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+        name         TEXT NOT NULL,
+        title        TEXT,
+        intro        TEXT,
+        avatar_key   TEXT,
+        sort_order   INTEGER NOT NULL DEFAULT 0,
+        active       INTEGER NOT NULL DEFAULT 1,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_employees_shop
+        ON employees(shop_code, sort_order, active)`,
       `CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         shop_code TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
         service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
         customer_name TEXT NOT NULL,
         customer_phone TEXT NOT NULL,
         scheduled_at TEXT NOT NULL,
@@ -130,6 +145,16 @@ async function ensureDatabase(env) {
         ('tonys-hair', 5, '09:00', '21:00', 30),
         ('tonys-hair', 6, '10:00', '20:00', 30),
         ('tonys-hair', 0, '10:00', '20:00', 30)`,
+      // --- Seed 员工（幂等：按姓名独立判定，避免首条插入后其余被 WHERE NOT EXISTS 跳过）---
+      `INSERT INTO employees(shop_code, name, title, intro, sort_order, active)
+        SELECT 'tonys-hair', 'Tony', '总监发型师', '二十年经验，擅长日系烫染与轮廓剪裁', 10, 1
+        WHERE NOT EXISTS (SELECT 1 FROM employees WHERE shop_code = 'tonys-hair' AND name = 'Tony')`,
+      `INSERT INTO employees(shop_code, name, title, intro, sort_order, active)
+        SELECT 'tonys-hair', 'Lisa', '高级发型师', '韩式刘海与染发设计', 20, 1
+        WHERE NOT EXISTS (SELECT 1 FROM employees WHERE shop_code = 'tonys-hair' AND name = 'Lisa')`,
+      `INSERT INTO employees(shop_code, name, title, intro, sort_order, active)
+        SELECT 'tonys-hair', '阿杰', '洗护技师', '头皮护理与洗发造型', 30, 1
+        WHERE NOT EXISTS (SELECT 1 FROM employees WHERE shop_code = 'tonys-hair' AND name = '阿杰')`,
     ];
 
     for (const sql of statements) {
@@ -141,6 +166,7 @@ async function ensureDatabase(env) {
       { table: "services", column: "category", ddl: "ALTER TABLE services ADD COLUMN category TEXT" },
       { table: "bookings", column: "customer_email", ddl: "ALTER TABLE bookings ADD COLUMN customer_email TEXT" },
       { table: "shop_schedule", column: "capacity", ddl: "ALTER TABLE shop_schedule ADD COLUMN capacity INTEGER NOT NULL DEFAULT 1" },
+      { table: "bookings", column: "employee_id", ddl: "ALTER TABLE bookings ADD COLUMN employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL" },
     ];
     for (const u of upgrades) {
       const cols = await env.DB.prepare(`PRAGMA table_info(${u.table})`).all();

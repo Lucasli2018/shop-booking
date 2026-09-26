@@ -151,6 +151,9 @@ class AdminApp {
     // 服务
     document.getElementById("addServiceBtn").addEventListener("click", () => this.openServiceModal());
 
+    // 员工
+    document.getElementById("addEmployeeBtn").addEventListener("click", () => this.openEmployeeModal());
+
     // 统计
     document.getElementById("refreshStatsBtn").addEventListener("click", () => this.loadStats());
 
@@ -176,6 +179,7 @@ class AdminApp {
     if (tab === "queue") this.loadQueue();
     if (tab === "bookings") this.loadBookings();
     if (tab === "services") this.loadServices();
+    if (tab === "employees") this.loadEmployees();
     if (tab === "schedule") this.loadSchedule();
     if (tab === "stats") this.loadStats();
     if (tab === "profile") { this.loadProfile(); this.loadAccounts(); }
@@ -260,6 +264,7 @@ class AdminApp {
           <div class="card" style="background: linear-gradient(135deg, #FCE4E4, #FFFFFF); border-color: var(--primary); padding: 20px;">
             <div style="font-size: 24px; font-weight: 700;">${escapeHtml(s.customerName)}</div>
             <div class="text-sm text-muted">${escapeHtml(s.serviceName)} · 预计 ${escapeHtml(s.scheduledAt)}</div>
+            ${s.employeeName ? `<div class="text-sm text-muted mt-1">🧑‍🔧 师傅：${escapeHtml(s.employeeName)}</div>` : ""}
             <div class="text-sm text-muted mt-2">电话：${escapeHtml(s.customerPhone || "-")}</div>
             <div class="mt-3">
               <button class="btn btn-primary btn-sm" onclick="app.completeServing(${s.id})">✅ 完成服务</button>
@@ -280,7 +285,7 @@ class AdminApp {
             <div class="queue-pos">${w.position}</div>
             <div style="flex: 1;">
               <div><strong>${escapeHtml(w.customerName)}</strong></div>
-              <div class="text-sm text-muted">${escapeHtml(w.serviceName)} · ${escapeHtml(w.scheduledAt)}</div>
+              <div class="text-sm text-muted">${escapeHtml(w.serviceName)} · ${escapeHtml(w.scheduledAt)}${w.employeeName ? " · " + escapeHtml(w.employeeName) : ""}</div>
             </div>
             <button class="btn btn-secondary btn-sm" onclick="app.callBooking(${w.id})">📣 叫号</button>
           </div>
@@ -297,7 +302,7 @@ class AdminApp {
             <div class="queue-pos" style="background: #FFF4E0; color: #B87A00;">!</div>
             <div style="flex: 1;">
               <div><strong>${escapeHtml(p.customer_name)}</strong></div>
-              <div class="text-sm text-muted">${escapeHtml(p.serviceName)} · ${escapeHtml(p.scheduled_at)}</div>
+              <div class="text-sm text-muted">${escapeHtml(p.serviceName)} · ${escapeHtml(p.scheduled_at)}${p.employeeName ? " · " + escapeHtml(p.employeeName) : ""}</div>
             </div>
             <div class="flex gap-2">
               <button class="btn btn-secondary btn-sm" onclick="app.confirmBooking(${p.id})">✓ 确认</button>
@@ -415,9 +420,9 @@ class AdminApp {
       const list = (byDate[d] || []).sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
       const wd = weekdayOf(d);
       const items = list.map(b => `
-        <div class="week-item st-${b.status}" title="${escapeHtml(b.customer_name)} · ${escapeHtml(b.serviceName || "")}">
+        <div class="week-item st-${b.status}" title="${escapeHtml(b.customer_name)} · ${escapeHtml(b.serviceName || "")}${b.employeeName ? " · " + escapeHtml(b.employeeName) : ""}">
           <span class="week-time">${escapeHtml(b.scheduled_at.slice(11))}</span>
-          <span class="week-svc">${escapeHtml(b.serviceName || "-")}</span>
+          <span class="week-svc">${escapeHtml(b.serviceName || "-")}${b.employeeName ? ` · ${escapeHtml(b.employeeName)}` : ""}</span>
           <span class="week-cust">${escapeHtml(b.customer_name)}</span>
         </div>`).join("");
 
@@ -458,7 +463,7 @@ class AdminApp {
   renderBookingsTable(bookings) {
     const body = document.getElementById("bookingsBody");
     if (bookings.length === 0) {
-      body.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 40px;">📭 暂无预约</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 40px;">📭 暂无预约</td></tr>';
       return;
     }
     body.innerHTML = bookings.map(b => `
@@ -466,12 +471,18 @@ class AdminApp {
         <td>#${b.id}</td>
         <td>${escapeHtml(b.scheduled_at)}</td>
         <td>${escapeHtml(b.serviceName || "-")}<br><span class="text-sm text-muted">${b.duration_min} 分钟</span></td>
+        <td>${this.renderEmployeeCell(b)}</td>
         <td>${escapeHtml(b.customer_name)}</td>
         <td>${escapeHtml(b.customer_phone)}</td>
         <td><span class="badge badge-${b.status}">${STATUS_LABEL[b.status] || b.status}</span></td>
         <td>${this.renderBookingActions(b)}</td>
       </tr>
     `).join("");
+  }
+
+  renderEmployeeCell(b) {
+    if (!b.employeeName) return '<span class="text-muted">—</span>';
+    return `${escapeHtml(b.employeeName)}${b.employeeActive ? "" : ' <span class="text-sm text-muted">(停用)</span>'}`;
   }
 
   renderBookingActions(b) {
@@ -614,6 +625,120 @@ class AdminApp {
       await this.admin.deleteService(id);
       showToast("已删除", "success");
       this.loadServices();
+    } catch (err) { showToast(err.message, "error"); }
+  }
+
+  // ============ 员工 Tab ============
+  async loadEmployees() {
+    try {
+      const res = await this.admin.getEmployees();
+      this.renderEmployees(res.employees || []);
+    } catch (err) {
+      showToast(err.message, "error");
+      if (err.status === 401) this.logout();
+    }
+  }
+
+  renderEmployees(employees) {
+    const body = document.getElementById("employeesBody");
+    if (!employees.length) {
+      body.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 40px;">👥 暂无员工，点右上角新增</td></tr>';
+      return;
+    }
+    body.innerHTML = employees.map(e => `
+      <tr>
+        <td>#${e.id}</td>
+        <td><strong>${escapeHtml(e.name)}</strong></td>
+        <td>${e.title ? escapeHtml(e.title) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-sm text-muted">${e.intro ? escapeHtml(e.intro) : "—"}</td>
+        <td>${e.sortOrder}</td>
+        <td>${e.active ? '<span class="badge badge-confirmed">在岗</span>' : '<span class="badge badge-rejected">停用</span>'}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="app.openEmployeeModal(${e.id})">✏️ 编辑</button>
+          <button class="btn btn-danger btn-sm" onclick="app.deleteEmployee(${e.id}, '${escapeAttr(e.name)}')">🗑️ 停用</button>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  openEmployeeModal(id = null) {
+    const content = document.getElementById("modalContent");
+    content.innerHTML = `
+      <h2 class="modal-title">${id ? "编辑员工" : "新增员工"}</h2>
+      <div class="field">
+        <label class="field-label">姓名 <span class="req">*</span></label>
+        <input class="input" id="empName" placeholder="如：Tony / 阿杰" maxlength="30">
+      </div>
+      <div class="field">
+        <label class="field-label">头衔</label>
+        <input class="input" id="empTitle" placeholder="如：高级发型师 / 洗护技师" maxlength="20">
+      </div>
+      <div class="field">
+        <label class="field-label">简介</label>
+        <textarea class="textarea" id="empIntro" placeholder="擅长方向等" maxlength="200"></textarea>
+      </div>
+      <div class="field">
+        <label class="field-label">显示顺序</label>
+        <input type="number" class="input" id="empOrder" min="0" value="0">
+      </div>
+      <div class="field">
+        <label class="field-label">状态</label>
+        <select class="select" id="empActive">
+          <option value="1">在岗（顾客可指定）</option>
+          <option value="0">停用</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="app.closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="app.saveEmployee(${id})">💾 保存</button>
+      </div>
+    `;
+
+    if (id) {
+      this.admin.get(`/api/admin/${this.shopCode}/employees/${id}`).then(res => {
+        const e = res.employee;
+        document.getElementById("empName").value = e.name || "";
+        document.getElementById("empTitle").value = e.title || "";
+        document.getElementById("empIntro").value = e.intro || "";
+        document.getElementById("empOrder").value = e.sortOrder || 0;
+        document.getElementById("empActive").value = e.active ? "1" : "0";
+      });
+    }
+
+    document.getElementById("modalOverlay").classList.remove("hidden");
+    setTimeout(() => document.getElementById("empName").focus(), 100);
+  }
+
+  async saveEmployee(id) {
+    const name = document.getElementById("empName").value.trim();
+    const title = document.getElementById("empTitle").value.trim() || null;
+    const intro = document.getElementById("empIntro").value.trim() || null;
+    const sortOrder = parseInt(document.getElementById("empOrder").value, 10) || 0;
+    const active = document.getElementById("empActive").value === "1" ? 1 : 0;
+    if (!name) { showToast("姓名必填", "error"); return; }
+
+    const body = { name, title, intro, sortOrder, active };
+    try {
+      if (id) {
+        await this.admin.updateEmployee(id, body);
+        showToast("已更新", "success");
+      } else {
+        await this.admin.createEmployee(body);
+        showToast("已创建", "success");
+      }
+      this.closeModal();
+      this.loadEmployees();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
+  async deleteEmployee(id, name) {
+    if (!confirm(`确认停用员工「${name}」？（历史预约保留归属，可重新启用）`)) return;
+    try {
+      await this.admin.deleteEmployee(id);
+      showToast("已停用", "success");
+      this.loadEmployees();
     } catch (err) { showToast(err.message, "error"); }
   }
 

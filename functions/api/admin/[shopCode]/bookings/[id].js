@@ -78,8 +78,10 @@ export async function onRequestPost({ request, env, params }) {
 
   // 查最新一条
   const updated = await env.DB.prepare(`
-    SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents
+    SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents,
+           e.name AS employeeName, e.active AS employeeActive
     FROM bookings b JOIN services s ON s.id = b.service_id
+    LEFT JOIN employees e ON e.id = b.employee_id
     WHERE b.id = ?
   `).bind(bookingId).first();
 

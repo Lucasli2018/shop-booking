@@ -21,6 +21,11 @@ class ApiClient {
     this.baseUrl = opts.baseUrl || "";
   }
 
+  // 公开：取本店在岗员工（顾客预约页「指定师傅」用）
+  getEmployees() {
+    return this.get(`/api/employees/${this.shopCode}`);
+  }
+
   async _request(method, path, opts = {}) {
     const headers = { ...opts.headers };
     const body = opts.body;
@@ -129,6 +134,23 @@ class AdminClient extends ApiClient {
 
   async deleteService(id) {
     return this.delete(`/api/admin/${this.shopCode}/services/${id}`);
+  }
+
+  // ============ 员工 / 技师 ============
+  async getEmployees() {
+    return this.get(`/api/admin/${this.shopCode}/employees`);
+  }
+
+  async createEmployee(employee) {
+    return this.post(`/api/admin/${this.shopCode}/employees`, employee);
+  }
+
+  async updateEmployee(id, patch) {
+    return this.put(`/api/admin/${this.shopCode}/employees/${id}`, patch);
+  }
+
+  async deleteEmployee(id) {
+    return this.delete(`/api/admin/${this.shopCode}/employees/${id}`);
   }
 
   // ============ 营业时间 ============

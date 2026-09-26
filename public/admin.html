@@ -45,6 +45,7 @@
       <button class="admin-tab active" data-tab="queue">📣 排队</button>
       <button class="admin-tab" data-tab="bookings">📅 预约</button>
       <button class="admin-tab" data-tab="services">🛍️ 服务</button>
+      <button class="admin-tab" data-tab="employees">👥 员工</button>
       <button class="admin-tab" data-tab="schedule">🕒 营业时间</button>
       <button class="admin-tab" data-tab="stats">📊 统计</button>
       <button class="admin-tab" data-tab="profile">⚙️ 店铺设置</button>
@@ -114,6 +115,7 @@
               <th>ID</th>
               <th>时间</th>
               <th>服务</th>
+              <th>技师</th>
               <th>顾客</th>
               <th>电话</th>
               <th>状态</th>
@@ -121,7 +123,7 @@
             </tr>
           </thead>
           <tbody id="bookingsBody">
-            <tr><td colspan="7" class="text-center text-muted" style="padding: 40px;">加载中…</td></tr>
+            <tr><td colspan="8" class="text-center text-muted" style="padding: 40px;">加载中…</td></tr>
           </tbody>
         </table>
       </div>
@@ -148,6 +150,31 @@
             </tr>
           </thead>
           <tbody id="servicesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab: 员工 -->
+    <div class="tab-panel hidden" data-panel="employees" id="panel-employees">
+      <div class="flex gap-3 mb-4" style="align-items: center;">
+        <h2 class="card-title" style="margin: 0; flex: 1;"><span class="icon">👥</span> 员工 / 技师管理</h2>
+        <button class="btn btn-primary btn-sm" id="addEmployeeBtn">➕ 新增员工</button>
+      </div>
+      <p class="text-sm text-muted mb-3">预约时可「指定师傅」，停用的员工不再出现在顾客端下拉，历史预约仍保留归属。</p>
+      <div class="table-wrap">
+        <table class="data" id="employeesTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>姓名</th>
+              <th>头衔</th>
+              <th>简介</th>
+              <th>顺序</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="employeesBody"></tbody>
         </table>
       </div>
     </div>

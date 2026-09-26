@@ -63,9 +63,11 @@ export async function onRequestGet({ request, env, params }) {
 
   const whereSql = where.join(" AND ");
   const rows = await env.DB.prepare(`
-    SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents
+    SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents,
+           e.name AS employeeName, e.active AS employeeActive
     FROM bookings b
     JOIN services s ON s.id = b.service_id
+    LEFT JOIN employees e ON e.id = b.employee_id
     WHERE ${whereSql}
     ORDER BY b.scheduled_at ASC, b.created_at ASC
     LIMIT ? OFFSET ?

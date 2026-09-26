@@ -86,8 +86,9 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const updated = await env.DB.prepare(`
-    SELECT b.id, b.scheduled_at, b.status, s.name AS serviceName
+    SELECT b.id, b.scheduled_at, b.status, s.name AS serviceName, e.name AS employeeName
     FROM bookings b JOIN services s ON s.id = b.service_id
+    LEFT JOIN employees e ON e.id = b.employee_id
     WHERE b.id = ?
   `).bind(bookingId).first();
 

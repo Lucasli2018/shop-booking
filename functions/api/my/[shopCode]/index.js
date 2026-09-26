@@ -20,9 +20,10 @@ export async function onRequestGet({ request, env, params }) {
 
   const rows = await env.DB.prepare(`
     SELECT b.id, b.service_id, b.customer_name, b.customer_phone, b.scheduled_at,
-           b.status, b.note, s.name AS serviceName
+           b.status, b.note, s.name AS serviceName, e.name AS employeeName
     FROM bookings b
     JOIN services s ON s.id = b.service_id
+    LEFT JOIN employees e ON e.id = b.employee_id
     WHERE b.shop_code = ? AND b.customer_phone = ?
     ORDER BY b.scheduled_at DESC
     LIMIT 50
@@ -32,6 +33,7 @@ export async function onRequestGet({ request, env, params }) {
     id: row.id,
     serviceId: row.service_id,
     serviceName: row.serviceName,
+    employeeName: row.employeeName || null,
     scheduledAt: row.scheduled_at,
     customerName: row.customer_name,
     customerPhone: maskPhone(row.customer_phone),

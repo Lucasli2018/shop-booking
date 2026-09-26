@@ -20,8 +20,23 @@ class BookingApp {
     // 初始化默认日期选择
     this.renderDateRow();
     this.loadServices();
+    this.loadEmployees();
     this.bindEvents();
     this.bindMyBookings();
+  }
+
+  // ============ 加载在岗员工（指定师傅可选） ============
+  async loadEmployees() {
+    const sel = document.getElementById("employeeSelect");
+    if (!sel) return;
+    try {
+      const res = await this.client.getEmployees();
+      const emps = res.employees || [];
+      sel.innerHTML = '<option value="">不指定（随机安排）</option>' +
+        emps.map(e => `<option value="${e.id}">${escapeHtml(e.name)}${e.title ? " · " + escapeHtml(e.title) : ""}</option>`).join("");
+    } catch (_) {
+      // 员工接口失败不阻断预约主流程
+    }
   }
 
   bindEvents() {
@@ -252,12 +267,14 @@ class BookingApp {
 
     try {
       const scheduledAt = `${this.state.selectedDate} ${this.state.selectedSlot}`;
+      const employeeId = document.getElementById("employeeSelect").value || null;
       const res = await this.client.post(`/api/bookings/${this.shopCode}`, {
         serviceId: this.state.selectedService.id,
         scheduledAt,
         customerName: name,
         customerPhone: phone,
         customerEmail: email || null,
+        employeeId,
         note,
       });
 
@@ -272,6 +289,7 @@ class BookingApp {
       document.getElementById("successDetail").innerHTML = `
         <div>📋 预约编号：<strong>#${b.id}</strong></div>
         <div style="margin-top: 6px;">💇 服务：${escapeHtml(b.serviceName)}</div>
+        ${b.employeeName ? `<div style="margin-top: 6px;">🧑‍🔧 师傅：<strong>${escapeHtml(b.employeeName)}</strong></div>` : ""}
         <div style="margin-top: 6px;">🕒 时间：${escapeHtml(b.scheduledAt)}</div>
         <div style="margin-top: 6px;">👤 姓名：${escapeHtml(b.customerName)}</div>
         <div style="margin-top: 6px;">📱 电话：${escapeHtml(b.customerPhone)}</div>

@@ -46,10 +46,11 @@ bucket_name = "shop-booking-images"       # ← 替换
 wrangler d1 execute shop-booking-db --remote --file=schema.sql
 ```
 
-这会创建 5 张表并插入 seed 数据：
+这会创建 6 张表并插入 seed 数据：
 - 一个店铺 `tonys-hair`（Tony's 美发）
 - 6 个服务
 - 7 天营业时间（周一到周日 09:00-21:00，30 分钟一档）
+- 3 位在岗员工（Tony / Lisa / 阿杰，发型师；可在后台「👥 员工」管理）
 - **默认账号 `admin` / 密码 `admin123`**（首次请求由 `_middleware` 自动播种，首次登录后请在后台修改密码）
 
 ### 5. 本地开发
@@ -94,7 +95,8 @@ shop-booking/
 │   ├── 0001_service_category.sql
 │   ├── 0002_booking_customer_email.sql
 │   ├── 0003_schedule_capacity.sql
-│   └── 0004_admin_accounts.sql
+│   ├── 0004_admin_accounts.sql
+│   └── 0005_employees.sql      # 员工/技师管理（employees 表 + bookings.employee_id）
 ├── tests/
 │   └── probe.js               # 无头浏览器页面探针（Node22 原生 WebSocket + CDP）
 ├── README.md
@@ -107,6 +109,7 @@ shop-booking/
 │   │   └── email.js           # Resend 邮件（可插拔，未配置即跳过）
 │   └── api/
 │       ├── services/          # 顾客：服务列表
+│       ├── employees/         # 顾客：在岗员工列表（预约选师傅用）
 │       ├── slots/             # 顾客：可用时间段生成
 │       ├── bookings/          # 顾客：提交预约
 │       ├── queue/             # 顾客：排队状态（公开）
@@ -116,8 +119,10 @@ shop-booking/
 │           ├── _guard.js      # Session 守卫（requireAdmin / requireOwner）
 │           ├── image/         # 图片读取
 │           └── [shopCode]/    # 店铺级后台接口
-│               ├── bookings.js       # 预约列表（支持 date 单日 / from+to 区间）
+│               ├── bookings.js       # 预约列表（支持 date 单日 / from+to 区间，含 technician 字段）
 │               ├── bookings/[id].js  # 状态变更
+│               ├── employees.js        # 员工列表（含停用）/ 创建
+│               ├── employees/[id].js    # 员工详情 / 更新 / 软删除
 │               ├── services.js       # 服务 CRUD（含分类）
 │               ├── services/[id].js
 │               ├── schedule.js       # 营业时间
@@ -130,7 +135,7 @@ shop-booking/
 └── public/                    # 静态前端
     ├── index.html             # 顾客预约页
     ├── queue.html             # 排队叫号页（5s 轮询）
-    ├── admin.html             # 商家后台（账号密码登录 → 5 个 Tab）
+    ├── admin.html             # 商家后台（账号密码登录 → 6 个 Tab：预约/服务/技师/统计/账号/设置）
     ├── css/style.css          # 全局样式（奶油+柔粉+薄荷绿）
     └── js/
         ├── api.js             # API client + AdminClient + showToast
@@ -148,6 +153,7 @@ shop-booking/
 | Method | Path | 说明 |
 |--------|------|------|
 | GET | `/api/services/:shopCode` | 服务列表 + 店铺信息 |
+| GET | `/api/employees/:shopCode` | 在岗员工列表（顾客预约选师傅用，按需返回头像 URL） |
 | GET | `/api/slots/:shopCode?serviceId&date` | 可用时间段（已扣占用 + 已过时段） |
 | POST | `/api/bookings/:shopCode` | 提交预约（原子防并发冲突；可选 `customerEmail` 发确认邮件） |
 | GET | `/api/queue/:shopCode` | 当前排队（顾客轮询用） |
@@ -162,6 +168,8 @@ shop-booking/
 | POST | `/api/admin/auth?shopCode=` | 账号密码登录 → 返回 token |
 | GET | `/api/admin/:shopCode/bookings?date&status` | 预约列表 + 今日统计 |
 | POST | `/api/admin/:shopCode/bookings/:id` | 状态变更，body: `{"action":"confirmed"}` |
+| GET/POST | `/api/admin/:shopCode/employees` | 员工列表（含停用）/ 创建，body: `{"name","title?","intro?","avatarKey?","sortOrder?"}` |
+| GET/PUT/DELETE | `/api/admin/:shopCode/employees/:id` | 员工详情 / 更新 / 软删除（`active=0`，历史预约保留归属，展示回退为「停用」） |
 | GET/POST | `/api/admin/:shopCode/services` | 服务列表 / 创建 |
 | GET/PUT/DELETE | `/api/admin/:shopCode/services/:id` | 服务详情 / 更新 / 软删除 |
 | GET/POST | `/api/admin/:shopCode/schedule` | 营业时间 / upsert |
@@ -190,11 +198,14 @@ shop-booking/
 
 ```sql
 shops             店铺（code, name, intro, logo_key, cover_key, timezone, status）
+employees         员工/技师（shop_code, name, title, intro, avatar_key, sort_order, active, created_at, updated_at）
+                 -- active=0 表示停用；历史预约保留 employee_id 归属，展示回退为「停用」
 services          服务项目（shop_code, name, description, duration_min, price_cents, sort_order, active）
 shop_schedule     营业时间（shop_code, weekday 0-6, opens_at, closes_at, slot_minutes, active）
-bookings          预约（shop_code, service_id, customer_name, customer_phone,
-                   scheduled_at 'YYYY-MM-DD HH:MM', duration_min, status, note,
-                   cancelled_at, rejected_at, called_at, done_at）
+bookings          预约（shop_code, service_id, employee_id, customer_name, customer_phone,
+                 scheduled_at 'YYYY-MM-DD HH:MM', duration_min, status, note,
+                 cancelled_at, rejected_at, called_at, done_at）
+                 -- employee_id REFERENCES employees(id) ON DELETE SET NULL（可为空：不指定师傅）
 admin_accounts    后台账号（shop_code, username, pass_hash, pass_salt, role, last_login_at, created_at）
 admin_sessions    后台会话（token, shop_code, account_id, created_at, expires_at）
 ```
@@ -360,6 +371,10 @@ VALUES ('my-shop', 'admin',
 
 ## 版本历史
 
+- **v0.4.0（2026-09-26）**：新增员工/技师管理（migration 0005）；
+  新增 `employees` 表（姓名/头衔/简介/头像/排序/在岗状态）与 `bookings.employee_id` 指派字段；
+  顾客预约页可「指定师傅（可选）」，下拉拉取在岗员工；后台新增「👥 员工」Tab（列表/新增/编辑/软删）；
+  预约列表、周历、排队页（顾客端与后台）均回显师傅名；员工停用后历史预约保留归属并标注「停用」。
 - **v0.3.0（2026-09-20）**：登录由「单 PIN」升级为「账号 + 密码」多账户体系（migration 0004）；
   新增 `admin_accounts` 表（owner/staff 角色）、`admin_sessions.account_id` 绑定；
   后台支持「修改密码」与「账号管理」（店主可增删子账号）；默认账号 `admin` / `admin123` 运行时自动播种。
@@ -383,7 +398,7 @@ VALUES ('my-shop', 'admin',
 - [ ] 预约提醒（提前 N 小时；Pages 无 Cron，需配一个 Worker 定时任务）
 - [x] 时段容量（多位师傅并行）
 - [ ] 爽约黑名单 / 次卡
-- [ ] 员工管理（多个发型师）
+- [x] 员工管理（多个发型师）
 - [ ] 优惠券 / 会员卡
 - [ ] 多店铺切换 UI / 商户自助注册
 
@@ -442,6 +457,15 @@ VALUES ('my-shop', 'admin',
   探针抓出并修复 `escapeHtml is not defined`、index.html 启动脚本重复两个真实问题。
 
 > 注：前端为经典脚本（非 ES Module），所有共享符号（含 `escapeHtml`）在 `api.js` 中定义于全局作用域。
+
+### 第三批（2026-09-26）：员工/技师管理
+
+- **employees 表**：`shop_code` 分租户，`name` 必填 ≤30，`active` 软删标记；`avatar_key` 复用 R2 图片体系（`GET /api/admin/image/:shopCode/:key`）。
+- **预约指派师傅**：顾客页 Step 3 新增「指定师傅（可选）」下拉，拉 `GET /api/employees/:shopCode`（仅返回在岗）；提交走 `POST /api/bookings/:shopCode`（新增 `employeeId`，校验「属本店且在岗」）。
+- **后台「👥 员工」Tab**：员工列表（在岗/停用）、新增/编辑模态框、软删除；与预约/服务/账号同级的店铺级接口。
+- **全链路透传**：预约列表、周历视图、排队页（顾客端 + 后台）均 `LEFT JOIN employees` 回显 `employeeName`；停用员工历史预约保留 `employee_id` 归属，展示回退为「停用」。
+- **种子修复**：middleware 与 migration 0005 的员工种子改为「按姓名独立 `WHERE NOT EXISTS`」判定，避免 Tony 插入后其余两条被跳过。
+- **探针**：`tests/probe.js` 新增 2 条断言（指定师傅下拉渲染 + 含在岗师傅 Tony）。
 
 ---
 

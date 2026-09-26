@@ -75,6 +75,7 @@ class QueueApp {
         serving: true,
         name: isMe ? "您" : res.nowServing.customerName,
         service: res.nowServing.serviceName,
+        employeeName: res.nowServing.employeeName || null,
         time: res.nowServing.scheduledAt,
         pos: null,
         isMe,
@@ -86,6 +87,7 @@ class QueueApp {
         serving: false,
         name: isMe ? "您" : w.customerName,
         service: w.serviceName,
+        employeeName: w.employeeName || null,
         time: w.scheduledAt,
         pos: w.position,
         isMe,
@@ -108,7 +110,7 @@ class QueueApp {
         ${item.serving ? '<div class="queue-pos" style="background: var(--primary); color: white;">★</div>' : `<div class="queue-pos">${item.pos}</div>`}
         <div style="flex: 1;">
           <div><strong>${escapeHtml(item.name)}</strong> ${item.isMe ? '<span class="badge badge-called">您</span>' : ""}</div>
-          <div class="text-sm text-muted">${escapeHtml(item.service)} · ${escapeHtml(item.time)}</div>
+          <div class="text-sm text-muted">${escapeHtml(item.service)} · ${escapeHtml(item.time)}${item.employeeName ? " · " + escapeHtml(item.employeeName) : ""}</div>
         </div>
         ${item.serving ? '<span style="color: var(--primary); font-weight: 700;">服务中</span>' : '<span class="text-muted text-sm">等待中</span>'}
       </div>

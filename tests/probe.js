@@ -75,6 +75,10 @@ async function main() {
   }
   assert("服务卡片渲染", (await evalJs(`document.querySelectorAll(".service-card").length`)) === 6);
 
+  // 指定师傅下拉：1 个「不指定」+ 3 位在岗种子师傅
+  assert("指定师傅下拉渲染", (await evalJs(`document.getElementById("employeeSelect")?.options.length`)) >= 4);
+  assert("师傅下拉含在岗师傅", (await evalJs(`Array.from(document.getElementById("employeeSelect").options).some(o => o.text.includes("Tony"))`)));
+
   // 点击分类筛选
   await evalJs(`document.querySelector('.cat-chip[data-cat="染烫"]').click()`);
   await new Promise(r => setTimeout(r, 200));
