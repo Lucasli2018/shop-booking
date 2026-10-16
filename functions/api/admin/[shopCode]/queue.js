@@ -16,8 +16,8 @@ export async function onRequestGet({ request, env, params }) {
   // 当前正在叫号
   const nowServingRow = await env.DB.prepare(`
     SELECT b.*, s.name AS serviceName, e.name AS employeeName
-    FROM bookings b JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE b.shop_code = ? AND b.status = 'called'
     ORDER BY b.called_at DESC
     LIMIT 1
@@ -37,8 +37,8 @@ export async function onRequestGet({ request, env, params }) {
   const horizon = addMinutes(now, 24 * 60);
   const confirmedRows = await env.DB.prepare(`
     SELECT b.*, s.name AS serviceName, e.name AS employeeName
-    FROM bookings b JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE b.shop_code = ? AND b.status = 'confirmed'
       AND b.scheduled_at <= ?
     ORDER BY b.scheduled_at ASC
@@ -57,8 +57,8 @@ export async function onRequestGet({ request, env, params }) {
   // 待确认（pending）
   const pendingRows = await env.DB.prepare(`
     SELECT b.*, s.name AS serviceName, e.name AS employeeName
-    FROM bookings b JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE b.shop_code = ? AND b.status = 'pending'
       AND b.scheduled_at <= ?
     ORDER BY b.scheduled_at ASC

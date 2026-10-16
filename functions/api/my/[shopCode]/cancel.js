@@ -27,7 +27,7 @@ export async function onRequestPost({ request, env, params }) {
   if (!PHONE_RE.test(phone)) return fail("手机号格式不正确", 400);
 
   const booking = await env.DB.prepare(
-    "SELECT * FROM bookings WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_bookings WHERE id = ? AND shop_code = ?"
   ).bind(bookingId, shopCode).first();
   if (!booking) return fail("预约不存在", 404);
 
@@ -50,7 +50,7 @@ export async function onRequestPost({ request, env, params }) {
 
   const nowStr = new Date().toISOString().slice(0, 19).replace("T", " ");
   await env.DB.prepare(
-    "UPDATE bookings SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?"
+    "UPDATE sb_bookings SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?"
   ).bind(nowStr, nowStr, bookingId).run();
 
   return json({ ok: true, message: "已取消" });

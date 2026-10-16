@@ -32,7 +32,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const booking = await env.DB.prepare(
-    "SELECT * FROM bookings WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_bookings WHERE id = ? AND shop_code = ?"
   ).bind(bookingId, shopCode).first();
   if (!booking) return fail("预约不存在", 404);
 
@@ -47,7 +47,7 @@ export async function onRequestPost({ request, env, params }) {
   const date = newScheduledAt.slice(0, 10);
   const time = newScheduledAt.slice(11);
   const schedule = await env.DB.prepare(`
-    SELECT * FROM shop_schedule
+    SELECT * FROM sb_shop_schedule
     WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
   `).bind(shopCode, date).first();
   if (!schedule) return fail("该日不营业");
@@ -60,19 +60,19 @@ export async function onRequestPost({ request, env, params }) {
   // 原子改期：排除自身的容量校验，防并发占位
   const end = addMinutes(newScheduledAt, booking.duration_min);
   const result = await env.DB.prepare(`
-    UPDATE bookings SET
+    UPDATE sb_bookings SET
       scheduled_at = ?,
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
       AND (
-        SELECT COUNT(*) FROM bookings b2
+        SELECT COUNT(*) FROM sb_bookings b2
         WHERE b2.shop_code = ?
           AND b2.id != ?
           AND b2.status IN ('pending','confirmed','called','done')
           AND b2.scheduled_at < ?
           AND datetime(b2.scheduled_at, '+' || b2.duration_min || ' minutes') > ?
       ) < (
-        SELECT COALESCE(MAX(capacity), 1) FROM shop_schedule
+        SELECT COALESCE(MAX(capacity), 1) FROM sb_shop_schedule
         WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
       )
   `).bind(
@@ -87,8 +87,8 @@ export async function onRequestPost({ request, env, params }) {
 
   const updated = await env.DB.prepare(`
     SELECT b.id, b.scheduled_at, b.status, s.name AS serviceName, e.name AS employeeName
-    FROM bookings b JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE b.id = ?
   `).bind(bookingId).first();
 

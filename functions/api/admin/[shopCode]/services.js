@@ -15,7 +15,7 @@ export async function onRequestGet({ request, env, params }) {
     SELECT id, name, description, duration_min AS durationMin,
            price_cents AS priceCents, category, sort_order AS sortOrder,
            active, created_at AS createdAt
-    FROM services
+    FROM sb_services
     WHERE shop_code = ?
     ORDER BY sort_order, id
   `).bind(shopCode).all();
@@ -48,12 +48,12 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const result = await env.DB.prepare(`
-    INSERT INTO services (shop_code, name, description, duration_min, price_cents, category, sort_order, active)
+    INSERT INTO sb_services (shop_code, name, description, duration_min, price_cents, category, sort_order, active)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(shopCode, name, description, durationMin, priceCents, category, sortOrder, active);
 
   const id = result.meta.last_row_id;
-  const service = await env.DB.prepare("SELECT * FROM services WHERE id = ?")
+  const service = await env.DB.prepare("SELECT * FROM sb_services WHERE id = ?")
     .bind(id).first();
 
   return json({ service }, 201);

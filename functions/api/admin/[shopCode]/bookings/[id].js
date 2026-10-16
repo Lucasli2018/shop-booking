@@ -48,7 +48,7 @@ export async function onRequestPost({ request, env, params }) {
 
   // 查当前预约
   const booking = await env.DB.prepare(
-    "SELECT * FROM bookings WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_bookings WHERE id = ? AND shop_code = ?"
   ).bind(bookingId, shopCode).first();
 
   if (!booking) return json({ error: "预约不存在", }, 404);
@@ -65,12 +65,12 @@ export async function onRequestPost({ request, env, params }) {
   const tsField = TIMESTAMP_FIELD[action];
   let sql;
   if (tsField) {
-    sql = `UPDATE bookings SET status = ?, ${tsField} = ?, updated_at = ? WHERE id = ?`;
+    sql = `UPDATE sb_bookings SET status = ?, ${tsField} = ?, updated_at = ? WHERE id = ?`;
     await env.DB.prepare(sql)
       .bind(action, nowStr, nowStr, bookingId)
       .run();
   } else {
-    sql = `UPDATE bookings SET status = ?, updated_at = ? WHERE id = ?`;
+    sql = `UPDATE sb_bookings SET status = ?, updated_at = ? WHERE id = ?`;
     await env.DB.prepare(sql)
       .bind(action, nowStr, bookingId)
       .run();
@@ -80,8 +80,8 @@ export async function onRequestPost({ request, env, params }) {
   const updated = await env.DB.prepare(`
     SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents,
            e.name AS employeeName, e.active AS employeeActive
-    FROM bookings b JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE b.id = ?
   `).bind(bookingId).first();
 

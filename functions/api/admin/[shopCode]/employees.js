@@ -14,7 +14,7 @@ export async function onRequestGet({ request, env, params }) {
   const rows = await env.DB.prepare(`
     SELECT id, name, title, intro, avatar_key AS avatarKey,
            sort_order AS sortOrder, active, created_at AS createdAt
-    FROM employees
+    FROM sb_employees
     WHERE shop_code = ?
     ORDER BY sort_order, id
   `).bind(shopCode).all();
@@ -39,12 +39,12 @@ export async function onRequestPost({ request, env, params }) {
   if (!name || name.length > 30) return json({ error: "员工姓名必填，最长 30 字" }, 400);
 
   const result = await env.DB.prepare(`
-    INSERT INTO employees (shop_code, name, title, intro, sort_order, active)
+    INSERT INTO sb_employees (shop_code, name, title, intro, sort_order, active)
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(shopCode, name, title, intro, sortOrder, active).run();
 
   const id = result.meta.last_row_id;
-  const employee = await env.DB.prepare("SELECT * FROM employees WHERE id = ?").bind(id).first();
+  const employee = await env.DB.prepare("SELECT * FROM sb_employees WHERE id = ?").bind(id).first();
 
   return json({ employee }, 201);
 }

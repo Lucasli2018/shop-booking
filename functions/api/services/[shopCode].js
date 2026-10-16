@@ -12,7 +12,7 @@ export async function onRequestGet({ request, env, params }) {
   const services = await env.DB.prepare(`
     SELECT id, name, description, duration_min AS durationMin,
            price_cents AS priceCents, category, sort_order AS sortOrder
-    FROM services
+    FROM sb_services
     WHERE shop_code = ? AND active = 1
     ORDER BY sort_order, id
   `).bind(shopCode).all();

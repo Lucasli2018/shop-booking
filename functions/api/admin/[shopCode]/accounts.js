@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const rows = await env.DB.prepare(
     `SELECT id, username, role, last_login_at, created_at
-     FROM admin_accounts WHERE shop_code = ? ORDER BY role DESC, id ASC`
+     FROM sb_admin_accounts WHERE shop_code = ? ORDER BY role DESC, id ASC`
   ).bind(shopCode).all();
 
   return json({ accounts: rows.results || [] });
@@ -45,14 +45,14 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const dup = await env.DB.prepare(
-    "SELECT id FROM admin_accounts WHERE shop_code = ? AND username = ?"
+    "SELECT id FROM sb_admin_accounts WHERE shop_code = ? AND username = ?"
   ).bind(shopCode, username).first();
   if (dup) return fail("该用户名已存在", 409);
 
   const salt = genSalt(16);
   const hash = await hashPassword(password, salt);
   const res = await env.DB.prepare(
-    `INSERT INTO admin_accounts(shop_code, username, pass_hash, pass_salt, role, created_at)
+    `INSERT INTO sb_admin_accounts(shop_code, username, pass_hash, pass_salt, role, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   ).bind(shopCode, username, hash, salt, role, now()).run();
 

@@ -9,10 +9,12 @@ compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
 # D1 数据库绑定（本地名 DB，对应后端 env.DB）
+# 共用 Cloudflare D1「dev」数据库（与 linguaverse-web / workbench-mobile / event-signin 等同一库），
+# 本项目所有业务表统一带 sb_ 前缀以隔离表空间。
 [[d1_databases]]
 binding = "DB"
-database_name = "shop-booking-db"
-database_id = "f5e7a5c2-af0d-42d3-a8a8-68e7b7a47fe8"
+database_name = "dev"
+database_id = "3c83aee3-4645-450b-b50b-6488750deeb4"
 
 # R2 存储绑定（本地名 R2，对应后端 env.R2）
 [[r2_buckets]]

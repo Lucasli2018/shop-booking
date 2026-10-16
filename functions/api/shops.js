@@ -5,7 +5,7 @@
 export async function onRequestGet({ env }) {
   const rows = await env.DB.prepare(
     `SELECT code, name, intro, logo_key, cover_key, status
-     FROM shops WHERE status = 'active' ORDER BY id`
+     FROM sb_shops WHERE status = 'active' ORDER BY id`
   ).all();
 
   const shops = (rows.results || []).map(s => ({

@@ -47,7 +47,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
 
   // 校验服务存在
   const service = await env.DB.prepare(
-    "SELECT * FROM services WHERE id = ? AND shop_code = ? AND active = 1"
+    "SELECT * FROM sb_services WHERE id = ? AND shop_code = ? AND active = 1"
   ).bind(serviceId, shopCode).first();
   if (!service) return fail("服务不存在", 404);
 
@@ -55,7 +55,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   let employeeName = null;
   if (employeeIdRaw) {
     const emp = await env.DB.prepare(
-      "SELECT id, name, active FROM employees WHERE id = ? AND shop_code = ?"
+      "SELECT id, name, active FROM sb_employees WHERE id = ? AND shop_code = ?"
     ).bind(employeeIdRaw, shopCode).first();
     if (!emp) return fail("指定的师傅不存在", 404);
     if (!emp.active) return fail("该师傅已停用，请重新选择或留空");
@@ -66,7 +66,7 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   const date = scheduledAt.slice(0, 10);
   const time = scheduledAt.slice(11);
   const schedule = await env.DB.prepare(`
-    SELECT * FROM shop_schedule
+    SELECT * FROM sb_shop_schedule
     WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
   `).bind(shopCode, date).first();
   if (!schedule) return fail("该日不营业");
@@ -82,18 +82,18 @@ export async function onRequestPost({ request, env, params, waitUntil }) {
   try {
     const end = addMinutes(scheduledAt, service.duration_min);
     const result = await env.DB.prepare(`
-      INSERT INTO bookings
+      INSERT INTO sb_bookings
         (shop_code, service_id, employee_id, customer_name, customer_phone,
          scheduled_at, duration_min, status, note, customer_email)
       SELECT ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?
       WHERE (
-        SELECT COUNT(*) FROM bookings b
+        SELECT COUNT(*) FROM sb_bookings b
         WHERE b.shop_code = ?
           AND b.status IN ('pending','confirmed','called','done')
           AND b.scheduled_at < ?
           AND datetime(b.scheduled_at, '+' || b.duration_min || ' minutes') > ?
       ) < (
-        SELECT COALESCE(MAX(capacity), 1) FROM shop_schedule
+        SELECT COALESCE(MAX(capacity), 1) FROM sb_shop_schedule
         WHERE shop_code = ? AND weekday = strftime('%w', ?) AND active = 1
       )
     `).bind(

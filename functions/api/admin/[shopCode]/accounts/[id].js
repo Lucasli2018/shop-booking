@@ -13,7 +13,7 @@ export async function onRequestDelete({ request, env, params }) {
   if (!Number.isInteger(targetId)) return fail("无效账号 ID", 400);
 
   const target = await env.DB.prepare(
-    "SELECT * FROM admin_accounts WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_admin_accounts WHERE id = ? AND shop_code = ?"
   ).bind(targetId, shopCode).first();
   if (!target) return fail("账号不存在", 404);
 
@@ -25,7 +25,7 @@ export async function onRequestDelete({ request, env, params }) {
   // 不能删除最后一个 owner
   if (target.role === "owner") {
     const ownerCnt = await env.DB.prepare(
-      "SELECT COUNT(*) AS c FROM admin_accounts WHERE shop_code = ? AND role = 'owner'"
+      "SELECT COUNT(*) AS c FROM sb_admin_accounts WHERE shop_code = ? AND role = 'owner'"
     ).bind(shopCode).first();
     if (ownerCnt && ownerCnt.c <= 1) {
       return fail("至少保留一个店主账号", 400);
@@ -33,12 +33,12 @@ export async function onRequestDelete({ request, env, params }) {
   }
 
   await env.DB.prepare(
-    "DELETE FROM admin_accounts WHERE id = ? AND shop_code = ?"
+    "DELETE FROM sb_admin_accounts WHERE id = ? AND shop_code = ?"
   ).bind(targetId, shopCode).run();
 
   // 顺手清理该账号的会话
   await env.DB.prepare(
-    "DELETE FROM admin_sessions WHERE account_id = ?"
+    "DELETE FROM sb_admin_sessions WHERE account_id = ?"
   ).bind(targetId).run();
 
   return json({ ok: true, deleted: targetId });

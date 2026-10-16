@@ -31,8 +31,8 @@ export async function onRequestGet({ request, env, params }) {
       SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done,
       SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled,
       COALESCE(SUM(CASE WHEN status IN ('done','called') THEN s.price_cents ELSE 0 END), 0) AS revenueCents
-    FROM bookings b
-    LEFT JOIN services s ON s.id = b.service_id
+    FROM sb_bookings b
+    LEFT JOIN sb_services s ON s.id = b.service_id
     WHERE b.shop_code = ? AND b.scheduled_at LIKE ?
   `).bind(shopCode, `${today}%`).first();
 
@@ -42,7 +42,7 @@ export async function onRequestGet({ request, env, params }) {
       SELECT COUNT(*) AS total,
              SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done,
              SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled
-      FROM bookings
+      FROM sb_bookings
       WHERE shop_code = ?
         AND scheduled_at >= datetime(?, '-${days} days')
         AND scheduled_at <= ?
@@ -62,7 +62,7 @@ export async function onRequestGet({ request, env, params }) {
   // 热门服务 TOP5（近 30 天，排除已取消）
   const topRows = await env.DB.prepare(`
     SELECT s.name AS name, COUNT(*) AS count
-    FROM bookings b JOIN services s ON s.id = b.service_id
+    FROM sb_bookings b JOIN sb_services s ON s.id = b.service_id
     WHERE b.shop_code = ?
       AND b.status NOT IN ('cancelled','rejected')
       AND b.scheduled_at >= datetime(?, '-30 days')
@@ -74,7 +74,7 @@ export async function onRequestGet({ request, env, params }) {
     SELECT substr(scheduled_at, 1, 10) AS date,
            COUNT(*) AS total,
            SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done
-    FROM bookings
+    FROM sb_bookings
     WHERE shop_code = ?
       AND scheduled_at >= datetime(?, '-6 days')
       AND scheduled_at <= ?

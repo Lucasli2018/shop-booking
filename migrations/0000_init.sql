@@ -2,7 +2,7 @@
 -- 适用：全新数据库（wrangler d1 migrations apply shop-booking-db --remote）
 
 
-CREATE TABLE IF NOT EXISTS shops (
+CREATE TABLE IF NOT EXISTS sb_shops (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   code        TEXT NOT NULL UNIQUE,
   name        TEXT NOT NULL,
@@ -19,9 +19,9 @@ CREATE TABLE IF NOT EXISTS shops (
   updated_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
 );
 
-CREATE TABLE IF NOT EXISTS services (
+CREATE TABLE IF NOT EXISTS sb_services (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  shop_code    TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  shop_code    TEXT NOT NULL REFERENCES sb_shops(code) ON DELETE CASCADE,
   name         TEXT NOT NULL,
   description  TEXT,
   duration_min INTEGER NOT NULL CHECK (duration_min > 0),
@@ -32,11 +32,11 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at   TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_services_shop ON services(shop_code, sort_order, active);
+CREATE INDEX IF NOT EXISTS sb_idx_services_shop ON sb_services(shop_code, sort_order, active);
 
-CREATE TABLE IF NOT EXISTS shop_schedule (
+CREATE TABLE IF NOT EXISTS sb_shop_schedule (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  shop_code    TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  shop_code    TEXT NOT NULL REFERENCES sb_shops(code) ON DELETE CASCADE,
   weekday      INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
   opens_at     TEXT NOT NULL,
   closes_at    TEXT NOT NULL,
@@ -45,10 +45,10 @@ CREATE TABLE IF NOT EXISTS shop_schedule (
   UNIQUE(shop_code, weekday)
 );
 
-CREATE TABLE IF NOT EXISTS bookings (
+CREATE TABLE IF NOT EXISTS sb_bookings (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  shop_code      TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
-  service_id     INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  shop_code      TEXT NOT NULL REFERENCES sb_shops(code) ON DELETE CASCADE,
+  service_id     INTEGER NOT NULL REFERENCES sb_services(id) ON DELETE CASCADE,
   customer_name  TEXT NOT NULL,
   customer_phone TEXT NOT NULL,
   scheduled_at   TEXT NOT NULL,
@@ -64,19 +64,19 @@ CREATE TABLE IF NOT EXISTS bookings (
   updated_at     TEXT NOT NULL DEFAULT (datetime('now', '+8 hours'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_bookings_shop_time_status
-  ON bookings(shop_code, scheduled_at, status);
-CREATE INDEX IF NOT EXISTS idx_bookings_phone
-  ON bookings(shop_code, customer_phone);
-CREATE INDEX IF NOT EXISTS idx_bookings_service_time
-  ON bookings(service_id, scheduled_at, status);
+CREATE INDEX IF NOT EXISTS sb_idx_bookings_shop_time_status
+  ON sb_bookings(shop_code, scheduled_at, status);
+CREATE INDEX IF NOT EXISTS sb_idx_bookings_phone
+  ON sb_bookings(shop_code, customer_phone);
+CREATE INDEX IF NOT EXISTS sb_idx_bookings_service_time
+  ON sb_bookings(service_id, scheduled_at, status);
 
-CREATE TABLE IF NOT EXISTS admin_sessions (
+CREATE TABLE IF NOT EXISTS sb_admin_sessions (
   token       TEXT PRIMARY KEY,
-  shop_code   TEXT NOT NULL REFERENCES shops(code) ON DELETE CASCADE,
+  shop_code   TEXT NOT NULL REFERENCES sb_shops(code) ON DELETE CASCADE,
   created_at  TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
   expires_at  TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_admin_sessions_shop
-  ON admin_sessions(shop_code, expires_at);
+CREATE INDEX IF NOT EXISTS sb_idx_admin_sessions_shop
+  ON sb_admin_sessions(shop_code, expires_at);

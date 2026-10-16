@@ -17,41 +17,43 @@ npm install -g --allow-scripts=esbuild,workerd wrangler
 > `--allow-scripts` 是必须的：wrangler 依赖 `esbuild`（打包）和 `workerd`（本地运行时），
 > 它们的 postinstall 脚本被 npm 默认禁用，不加就会报 `Cannot find module 'esbuild'`。
 
-### 2. 在 Cloudflare 上创建 D1 数据库和 R2 bucket
+### 2. 准备数据源（Cloudflare D1 + R2）
 
-打开 [Cloudflare Dashboard → Workers & Pages](https://dash.cloudflare.com/)：
+本项目复用领主统一的 **Cloudflare D1「dev」共享数据库**（database_id：`3c83aee3-4645-450b-b50b-6488750deeb4`），与 linguaverse-web / workbench-mobile / event-signin 等同库但各自用表前缀隔离，**无需新建 D1 数据库**：
 
-1. **D1 Database**：Workers & Pages → D1 → Create D1 Database
-   - Database name: `shop-booking-db`
-   - 创建后记下 **Database ID**（UUID 格式）
-2. **R2 Bucket**：Workers & Pages → R2 → Create bucket
-   - Bucket name: `shop-booking-images`
+- 全部业务表统一带 `sb_` 前缀（如 `sb_shops` / `sb_bookings` / `sb_services` / `sb_employees` / `sb_shop_schedule` / `sb_admin_accounts` / `sb_admin_sessions`），避免与其它项目冲突。
+- R2 Bucket（图片存储）仍需要一个独立桶：Workers & Pages → R2 → Create bucket，Bucket name 例如 `shop-booking-images`（沿用原有即可）。
 
 ### 3. 修改 wrangler.toml
 
 ```toml
 [[d1_databases]]
 binding = "DB"
-database_name = "shop-booking-db"
-database_id = "你的-D1-Database-ID"      # ← 替换
+database_name = "dev"
+database_id = "3c83aee3-4645-450b-b50b-6488750deeb4"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "shop-booking-images"       # ← 替换
+bucket_name = "shop-booking-images"       # ← 替换为你实际的 R2 桶名
 ```
 
-### 4. 初始化生产数据库
+### 4. 初始化生产数据库（可选，推荐）
+
+首次请求时 `_middleware.js` 会自动检测空库并建表 + seed，无需手动执行。
+如需显式初始化 / 重置，可运行：
 
 ```bash
-wrangler d1 execute shop-booking-db --remote --file=schema.sql
+wrangler d1 execute dev --remote --file=schema.sql
 ```
 
-这会创建 6 张表并插入 seed 数据：
-- 一个店铺 `tonys-hair`（Tony's 美发）
-- 6 个服务
-- 7 天营业时间（周一到周日 09:00-21:00，30 分钟一档）
-- 3 位在岗员工（Tony / Lisa / 阿杰，发型师；可在后台「👥 员工」管理）
+这会创建 7 张 `sb_` 前缀表并插入 seed 数据：
+
+- 两个演示店铺：`tonys-hair`（Tony's 美发）、`nails-art`（小雅美甲）
+- 各店铺的服务、营业时间表（周一~周日）、在岗员工
+- **一批演示预约（测试数据）**：`sb_bookings` 中预置 6 条「未来日期」的预约（张三 / 李四 / 王五 / 赵六 / 钱七 / 孙八，覆盖已确认 / 待确认 / 已完成状态），便于直接预览后台统计、周历与排队视图
 - **默认账号 `admin` / 密码 `admin123`**（首次请求由 `_middleware` 自动播种，首次登录后请在后台修改密码）
+
+> 注：测试预约用 `date('now','+8 hours','+N days')` 动态生成，始终落在未来，重复执行 schema.sql 也不会重复插入（`WHERE NOT EXISTS` 幂等）。
 
 ### 5. 本地开发
 
@@ -285,7 +287,7 @@ WHERE NOT EXISTS (
 ## 部署检查清单
 
 - [ ] `wrangler.toml` 里的 `database_id` 和 `bucket_name` 已替换为真实值
-- [ ] `wrangler d1 execute shop-booking-db --remote --file=schema.sql` 已执行（生产 D1 有数据）
+- [ ] `wrangler d1 execute dev --remote --file=schema.sql` 已执行（生产 D1 有数据）
 - [ ] `wrangler pages deploy . --project-name=shop-booking` 已执行
 - [ ] 打开 `https://<project>.pages.dev/?shop=tonys-hair` 看到服务列表
 - [ ] 打开 `https://<project>.pages.dev/admin.html?shop=tonys-hair`，用账号 `admin` / 密码 `admin123` 登录成功
@@ -357,7 +359,7 @@ VALUES ('my-shop', 'admin',
 ### Q: 为什么部署后 D1 里没数据？
 
 `wrangler pages deploy` 只上传静态文件 + Functions，不初始化数据库。
-必须手动执行：`wrangler d1 execute shop-booking-db --remote --file=schema.sql`
+必须手动执行：`wrangler d1 execute dev --remote --file=schema.sql`
 
 ### Q: 本地开发数据在哪？
 
@@ -416,10 +418,9 @@ VALUES ('my-shop', 'admin',
 
 - **一键初始化（推荐）**：`node scripts/init-d1.mjs`（需 `CLOUDFLARE_API_TOKEN` 环境变量，D1 Edit 权限；
   加 `--drop` 先清空重建。脚本自动按名字找库、逐条执行 schema.sql、校验中文与表结构）
-- **全新数据库**：`wrangler d1 execute shop-booking-db --remote --file=schema.sql`（全量快照，一步到位）
-- **已有数据库升级**：把 `migrations/` 里的 SQL 按序号执行（Cloudflare Dashboard → D1 → SQL 编辑器，或 `wrangler d1 migrations apply shop-booking-db --remote`）
-- **本地开发**：无需手动操作，`_middleware.js` 首次访问自动建表 + 幂等补列（不区分分支，
-  git 化后本地 `CF_PAGES_BRANCH` 是 `master` 也能正常初始化）
+- **全新数据库**：`wrangler d1 execute dev --remote --file=schema.sql`（全量快照，一步到位）
+- **已有数据库升级**：把 `migrations/` 里的 SQL 按序号执行（Cloudflare Dashboard → D1 → SQL 编辑器，或 `wrangler d1 migrations apply dev --remote`）
+- **本地开发**：无需手动操作，`_middleware.js` 首次访问自动建表 + seed（含演示预约），不区分分支
 
 ## 邮件确认（可插拔）
 
@@ -476,6 +477,18 @@ VALUES ('my-shop', 'admin',
 - **探针**：`tests/probe.js` 新增 2 条断言（指定师傅下拉渲染 + 含在岗师傅 Tony）。
 
 ---
+
+## 本次完善记录（2026-10-16）：数据源切换 + 表前缀 + 测试数据
+
+- **替换数据源**：D1 绑定由独立库 `shop-booking-db` 改为领主统一共享库 `dev`
+  （database_id `3c83aee3-4645-450b-b50b-6488750deeb4`），与 linguaverse-web / workbench-mobile / event-signin 同库。
+- **表前缀 `sb_`**：所有业务表统一加 `sb_` 前缀（`sb_shops` / `sb_services` / `sb_shop_schedule` /
+  `sb_employees` / `sb_bookings` / `sb_admin_accounts` / `sb_admin_sessions`），索引同步加 `sb_idx_` 前缀，
+  避免共享库内与其它项目冲突。涉及 `schema.sql`、`migrations/`、`functions/**`、`scripts/**` 的 SQL 上下文全量替换。
+- **新增演示预约（测试数据）**：`schema.sql` 与 `_middleware.js` 的种子里预置 6 条未来日期预约
+  （覆盖 confirmed / pending / done），`WHERE NOT EXISTS` 幂等，便于直接预览后台统计、周历与排队视图。
+- **清理**：移除 `_middleware.js` 中针对旧库「补列」的历史升级分支（全新 `sb_` schema 已含全部列）。
+- **文档**：README 同步更新数据源说明、`sb_` 前缀、演示预约与 `dev` 库相关命令。
 
 ## License
 

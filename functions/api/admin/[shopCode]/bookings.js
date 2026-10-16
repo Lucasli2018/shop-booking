@@ -38,7 +38,7 @@ export async function onRequestGet({ request, env, params }) {
       SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) AS cancelled,
       SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) AS rejected,
       COUNT(*) AS total
-    FROM bookings
+    FROM sb_bookings
     WHERE shop_code = ? AND scheduled_at LIKE ?
   `).bind(shopCode, `${todayStr}%`).first();
 
@@ -65,9 +65,9 @@ export async function onRequestGet({ request, env, params }) {
   const rows = await env.DB.prepare(`
     SELECT b.*, s.name AS serviceName, s.price_cents AS priceCents,
            e.name AS employeeName, e.active AS employeeActive
-    FROM bookings b
-    JOIN services s ON s.id = b.service_id
-    LEFT JOIN employees e ON e.id = b.employee_id
+    FROM sb_bookings b
+    JOIN sb_services s ON s.id = b.service_id
+    LEFT JOIN sb_employees e ON e.id = b.employee_id
     WHERE ${whereSql}
     ORDER BY b.scheduled_at ASC, b.created_at ASC
     LIMIT ? OFFSET ?

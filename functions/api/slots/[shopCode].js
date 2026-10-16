@@ -37,7 +37,7 @@ export async function onRequestGet({ request, env, params }) {
   const shop = r.shop;
 
   const service = await env.DB.prepare(
-    "SELECT * FROM services WHERE id = ? AND shop_code = ? AND active = 1"
+    "SELECT * FROM sb_services WHERE id = ? AND shop_code = ? AND active = 1"
   ).bind(serviceId, shopCode).first();
   if (!service) return fail("服务不存在", 404);
 
@@ -50,7 +50,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const weekday = weekdayOf(date, shop.timezone);
   const schedule = await env.DB.prepare(
-    "SELECT * FROM shop_schedule WHERE shop_code = ? AND weekday = ? AND active = 1"
+    "SELECT * FROM sb_shop_schedule WHERE shop_code = ? AND weekday = ? AND active = 1"
   ).bind(shopCode, weekday).first();
 
   if (!schedule) {
@@ -73,7 +73,7 @@ export async function onRequestGet({ request, env, params }) {
   // 查占用区间
   const busy = await env.DB.prepare(`
     SELECT scheduled_at, duration_min
-    FROM bookings
+    FROM sb_bookings
     WHERE shop_code = ? AND scheduled_at LIKE ?
       AND status IN ('pending','confirmed','called','done')
   `).bind(shopCode, `${date}%`).all();

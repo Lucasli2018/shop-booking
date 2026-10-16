@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ACCT = "332b848d9f5d9ec2808bdb855763eb8e";
-const DB_NAME = "shop-booking-db";
+const DB_NAME = "dev";
 const file = process.argv[2];
 if (!file) { console.error("用法: node scripts/apply-migration.mjs <migration-file>"); process.exit(1); }
 
@@ -55,5 +55,5 @@ for (const s of stmts) {
 }
 
 const v = await api(`/d1/database/${db.uuid}/query`, { method: "POST", body: JSON.stringify({
-  sql: "SELECT name FROM pragma_table_info('shop_schedule') WHERE name='capacity'" }) });
+  sql: "SELECT name FROM pragma_table_info('sb_shop_schedule') WHERE name='capacity'" }) });
 console.log(v.length && v[0].results.length ? "线上 capacity 列确认存在" : "警告: capacity 列缺失");

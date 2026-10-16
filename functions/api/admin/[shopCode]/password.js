@@ -28,7 +28,7 @@ export async function onRequestPut({ request, env, params }) {
 
   // 校验当前密码
   const full = await env.DB.prepare(
-    "SELECT * FROM admin_accounts WHERE id = ?"
+    "SELECT * FROM sb_admin_accounts WHERE id = ?"
   ).bind(account.id).first();
   if (!full || !(await verifyPassword(currentPassword, full.pass_salt, full.pass_hash))) {
     return fail("当前密码错误", 401);
@@ -37,7 +37,7 @@ export async function onRequestPut({ request, env, params }) {
   const newSalt = genSalt(16);
   const newHash = await hashPassword(newPassword, newSalt);
   await env.DB.prepare(
-    "UPDATE admin_accounts SET pass_hash = ?, pass_salt = ? WHERE id = ?"
+    "UPDATE sb_admin_accounts SET pass_hash = ?, pass_salt = ? WHERE id = ?"
   ).bind(newHash, newSalt, account.id).run();
 
   return json({ ok: true, passwordChanged: true });

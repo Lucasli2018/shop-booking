@@ -66,10 +66,10 @@ export async function onRequestPut({ request, env, params }) {
   binds.push(new Date().toISOString().slice(0, 19).replace("T", " "));
   binds.push(shopCode);
 
-  await env.DB.prepare(`UPDATE shops SET ${sets.join(", ")} WHERE code = ?`)
+  await env.DB.prepare(`UPDATE sb_shops SET ${sets.join(", ")} WHERE code = ?`)
     .bind(...binds).run();
 
-  const updated = await env.DB.prepare("SELECT * FROM shops WHERE code = ?")
+  const updated = await env.DB.prepare("SELECT * FROM sb_shops WHERE code = ?")
     .bind(shopCode).first();
 
   return json({

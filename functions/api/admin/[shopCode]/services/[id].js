@@ -11,7 +11,7 @@ async function findService(env, shopCode, id) {
   const result = parseInt(id, 10);
   if (!result) return null;
   return await env.DB.prepare(
-    "SELECT * FROM services WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_services WHERE id = ? AND shop_code = ?"
   ).bind(result, shopCode).first();
 }
 
@@ -79,7 +79,7 @@ export async function onRequestPut({ request, env, params }) {
   binds.push(new Date().toISOString().slice(0, 19).replace("T", " "));
   binds.push(id, shopCode);
 
-  await env.DB.prepare(`UPDATE services SET ${sets.join(", ")} WHERE id = ? AND shop_code = ?`)
+  await env.DB.prepare(`UPDATE sb_services SET ${sets.join(", ")} WHERE id = ? AND shop_code = ?`)
     .bind(...binds).run();
 
   const updated = await findService(env, shopCode, id);
@@ -95,7 +95,7 @@ export async function onRequestDelete({ request, env, params }) {
   if (!service) return json({ error: "服务不存在" }, 404);
 
   // 软删除：active=0
-  await env.DB.prepare("UPDATE services SET active = 0, updated_at = ? WHERE id = ?")
+  await env.DB.prepare("UPDATE sb_services SET active = 0, updated_at = ? WHERE id = ?")
     .bind(new Date().toISOString().slice(0, 19).replace("T", " "), id).run();
 
   return json({ deleted: id, message: "服务已下架" });

@@ -62,7 +62,7 @@ export async function onRequestPost({ request, env, params }) {
 
   // 查账户
   const account = await env.DB.prepare(
-    "SELECT * FROM admin_accounts WHERE shop_code = ? AND username = ?"
+    "SELECT * FROM sb_admin_accounts WHERE shop_code = ? AND username = ?"
   ).bind(shopCode, username).first();
 
   if (!account || !(await verifyPassword(password, account.pass_salt, account.pass_hash))) {
@@ -75,7 +75,7 @@ export async function onRequestPost({ request, env, params }) {
   // 更新最后登录时间
   const nowStr = new Date().toISOString().slice(0, 19).replace("T", " ");
   await env.DB.prepare(
-    "UPDATE admin_accounts SET last_login_at = ? WHERE id = ?"
+    "UPDATE sb_admin_accounts SET last_login_at = ? WHERE id = ?"
   ).bind(nowStr, account.id).run();
 
   // 创建 session（绑定 account_id）
@@ -84,12 +84,12 @@ export async function onRequestPost({ request, env, params }) {
   const expiresStr = expires.toISOString().slice(0, 19).replace("T", " ");
 
   await env.DB.prepare(
-    "INSERT INTO admin_sessions (token, shop_code, account_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO sb_admin_sessions (token, shop_code, account_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
   ).bind(token, shopCode, account.id, nowStr, expiresStr).run();
 
   // 清理过期 session（顺手做）
   await env.DB.prepare(
-    "DELETE FROM admin_sessions WHERE expires_at < ?"
+    "DELETE FROM sb_admin_sessions WHERE expires_at < ?"
   ).bind(nowStr).run();
 
   return json({

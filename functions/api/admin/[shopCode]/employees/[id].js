@@ -11,7 +11,7 @@ export async function onRequestGet({ request, env, params }) {
   if (!g.ok) return g.response;
 
   const emp = await env.DB.prepare(
-    "SELECT * FROM employees WHERE id = ? AND shop_code = ?"
+    "SELECT * FROM sb_employees WHERE id = ? AND shop_code = ?"
   ).bind(parseInt(id, 10), shopCode).first();
   if (!emp) return json({ error: "员工不存在" }, 404);
   return json({ employee: emp });
@@ -24,7 +24,7 @@ export async function onRequestPut({ request, env, params }) {
 
   const empId = parseInt(id, 10);
   const existing = await env.DB.prepare(
-    "SELECT id FROM employees WHERE id = ? AND shop_code = ?"
+    "SELECT id FROM sb_employees WHERE id = ? AND shop_code = ?"
   ).bind(empId, shopCode).first();
   if (!existing) return json({ error: "员工不存在" }, 404);
 
@@ -40,13 +40,13 @@ export async function onRequestPut({ request, env, params }) {
   const active = body.active === false ? 0 : 1;
 
   await env.DB.prepare(`
-    UPDATE employees
+    UPDATE sb_employees
     SET name = ?, title = ?, intro = ?, sort_order = ?, active = ?,
         updated_at = datetime('now', '+8 hours')
     WHERE id = ?
   `).bind(name, title, intro, sortOrder, active, empId).run();
 
-  const employee = await env.DB.prepare("SELECT * FROM employees WHERE id = ?").bind(empId).first();
+  const employee = await env.DB.prepare("SELECT * FROM sb_employees WHERE id = ?").bind(empId).first();
   return json({ employee, message: "已更新" });
 }
 
@@ -57,13 +57,13 @@ export async function onRequestDelete({ request, env, params }) {
 
   const empId = parseInt(id, 10);
   const existing = await env.DB.prepare(
-    "SELECT id FROM employees WHERE id = ? AND shop_code = ?"
+    "SELECT id FROM sb_employees WHERE id = ? AND shop_code = ?"
   ).bind(empId, shopCode).first();
   if (!existing) return json({ error: "员工不存在" }, 404);
 
   // 软删除：停用在岗状态；历史预约的 employee_id 保留（展示时回退为「已离职/停用」）
   await env.DB.prepare(
-    "UPDATE employees SET active = 0, updated_at = datetime('now', '+8 hours') WHERE id = ?"
+    "UPDATE sb_employees SET active = 0, updated_at = datetime('now', '+8 hours') WHERE id = ?"
   ).bind(empId).run();
 
   return json({ ok: true, message: "员工已停用（历史预约保留归属）" });

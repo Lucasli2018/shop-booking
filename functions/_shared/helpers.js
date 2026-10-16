@@ -23,7 +23,7 @@ export async function readJson(request) {
 // ============ 校验店铺存在 ============
 export async function getShop(env, shopCode) {
   if (!shopCode || typeof shopCode !== "string") return null;
-  const row = await env.DB.prepare("SELECT * FROM shops WHERE code = ?")
+  const row = await env.DB.prepare("SELECT * FROM sb_shops WHERE code = ?")
     .bind(shopCode).first();
   return row;
 }
@@ -53,14 +53,14 @@ export async function requireSession(env, request, shopCode) {
   if (!token) return { error: "未登录", status: 401 };
 
   const session = await env.DB.prepare(
-    "SELECT * FROM admin_sessions WHERE token = ?"
+    "SELECT * FROM sb_admin_sessions WHERE token = ?"
   ).bind(token).first();
 
   if (!session) return { error: "会话无效", status: 401 };
 
   const now = new Date().toISOString().slice(0, 19).replace("T", " ");
   if (session.expires_at < now) {
-    await env.DB.prepare("DELETE FROM admin_sessions WHERE token = ?")
+    await env.DB.prepare("DELETE FROM sb_admin_sessions WHERE token = ?")
       .bind(token).run();
     return { error: "会话已过期", status: 401 };
   }
@@ -81,7 +81,7 @@ export async function requireSession(env, request, shopCode) {
 
 export async function getAccount(env, accountId) {
   if (!accountId) return null;
-  return env.DB.prepare("SELECT * FROM admin_accounts WHERE id = ?")
+  return env.DB.prepare("SELECT * FROM sb_admin_accounts WHERE id = ?")
     .bind(accountId).first();
 }
 

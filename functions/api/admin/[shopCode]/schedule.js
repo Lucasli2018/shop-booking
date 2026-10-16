@@ -16,7 +16,7 @@ export async function onRequestGet({ request, env, params }) {
   const rows = await env.DB.prepare(`
     SELECT id, weekday, opens_at AS opensAt, closes_at AS closesAt,
            slot_minutes AS slotMinutes, capacity, active
-    FROM shop_schedule
+    FROM sb_shop_schedule
     WHERE shop_code = ?
     ORDER BY weekday
   `).bind(shopCode).all();
@@ -67,7 +67,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   await env.DB.prepare(`
-    INSERT INTO shop_schedule (shop_code, weekday, opens_at, closes_at, slot_minutes, capacity, active)
+    INSERT INTO sb_shop_schedule (shop_code, weekday, opens_at, closes_at, slot_minutes, capacity, active)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(shop_code, weekday) DO UPDATE SET
       opens_at = excluded.opens_at,
@@ -78,7 +78,7 @@ export async function onRequestPost({ request, env, params }) {
   `).bind(shopCode, weekday, opensAt, closesAt, slotMinutes, capacity, active);
 
   const row = await env.DB.prepare(
-    "SELECT * FROM shop_schedule WHERE shop_code = ? AND weekday = ?"
+    "SELECT * FROM sb_shop_schedule WHERE shop_code = ? AND weekday = ?"
   ).bind(shopCode, weekday).first();
 
   return json({ schedule: row });

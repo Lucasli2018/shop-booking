@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const ACCT = "332b848d9f5d9ec2808bdb855763eb8e";
-const DB_NAME = "shop-booking-db";
+const DB_NAME = "dev";
 const DROP = process.argv.includes("--drop");
 
 // TOKEN_FILE 优先：宿主环境可能预置了权限不足的 CLOUDFLARE_API_TOKEN（如仅 Pages:Edit）
@@ -50,7 +50,7 @@ const query = sql =>
 
 // 2. 可选：清空业务表
 if (DROP) {
-  for (const t of ["bookings", "admin_sessions", "services", "shop_schedule", "shops"]) {
+  for (const t of ["sb_bookings", "sb_admin_sessions", "sb_services", "sb_shop_schedule", "sb_shops"]) {
     await query(`DROP TABLE IF EXISTS ${t}`);
     console.log(`dropped ${t}`);
   }
@@ -79,14 +79,14 @@ if (fail) process.exit(1);
 
 // 5. 验证（中文 + 行数 + 新列）
 const v = await query(`
-  SELECT (SELECT COUNT(*) FROM shops) AS shops,
-         (SELECT COUNT(*) FROM services) AS services,
-         (SELECT COUNT(*) FROM shop_schedule) AS schedule,
-         (SELECT COUNT(*) FROM pragma_table_info('services') WHERE name='category') AS has_category,
-         (SELECT COUNT(*) FROM pragma_table_info('bookings') WHERE name='customer_email') AS has_email
+  SELECT (SELECT COUNT(*) FROM sb_shops) AS shops,
+         (SELECT COUNT(*) FROM sb_services) AS services,
+         (SELECT COUNT(*) FROM sb_shop_schedule) AS schedule,
+         (SELECT COUNT(*) FROM pragma_table_info('sb_services') WHERE name='category') AS has_category,
+         (SELECT COUNT(*) FROM pragma_table_info('sb_bookings') WHERE name='customer_email') AS has_email
 `);
 console.log("counts:", JSON.stringify(v[0].results[0]));
-const sample = await query("SELECT name, category FROM services ORDER BY sort_order LIMIT 3");
+const sample = await query("SELECT name, category FROM sb_services ORDER BY sort_order LIMIT 3");
 console.log("sample:", JSON.stringify(sample[0].results));
 const names = sample[0].results.map(r => r.name).join(",");
 if (/[\u4e00-\u9fff]/.test(names)) {

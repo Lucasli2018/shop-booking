@@ -64,7 +64,7 @@ export async function onRequestPost({ request, env, params }) {
   if (kind === "logo" || kind === "cover") {
     const field = kind === "logo" ? "logo_key" : "cover_key";
     await env.DB.prepare(
-      `UPDATE shops SET ${field} = ?, updated_at = ? WHERE code = ?`
+      `UPDATE sb_shops SET ${field} = ?, updated_at = ? WHERE code = ?`
     ).bind(key, new Date().toISOString().slice(0, 19).replace("T", " "), shopCode).run();
   }
 

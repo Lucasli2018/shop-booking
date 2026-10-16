@@ -12,7 +12,7 @@ export async function onRequestGet({ request, env, params }) {
 
   const rows = await env.DB.prepare(`
     SELECT id, name, title, intro, sort_order AS sortOrder, avatar_key AS avatarKey
-    FROM employees
+    FROM sb_employees
     WHERE shop_code = ? AND active = 1
     ORDER BY sort_order, id
   `).bind(shopCode).all();
